@@ -2,13 +2,16 @@ import { useState } from 'react';
 import { useLiveQuery } from 'dexie-react-hooks';
 import { db } from '../db/db';
 import { TIPOS } from '../db/defaultData';
-import { hojeISO } from '../utils/format';
+import { hojeISO, formatCurrency } from '../utils/format';
+import { criarRecorrencia, alternarRecorrencia, excluirRecorrencia } from '../db/recorrencias';
 import MoneyInput from '../components/MoneyInput';
 import EditableSelect from '../components/EditableSelect';
+import ConfirmDialog from '../components/ConfirmDialog';
+import { IconRepeat, IconTrash } from '../components/Icons';
 
 const TIPO_INICIAL = 'despesa';
 
-export default function Lancar({ irParaHistorico }) {
+export default function Lancar() {
   const [tipo, setTipo] = useState(TIPO_INICIAL);
   const [valor, setValor] = useState(0);
   const [data, setData] = useState(hojeISO());
@@ -16,8 +19,10 @@ export default function Lancar({ irParaHistorico }) {
   const [subcategoriaId, setSubcategoriaId] = useState(null);
   const [contaId, setContaId] = useState(null);
   const [nota, setNota] = useState('');
+  const [repetirMensalmente, setRepetirMensalmente] = useState(false);
   const [salvando, setSalvando] = useState(false);
   const [mensagem, setMensagem] = useState('');
+  const [excluindoRecId, setExcluindoRecId] = useState(null);
 
   const categorias = useLiveQuery(
     () => db.categorias.where('tipo').equals(tipo).sortBy('ordem'),
@@ -31,7 +36,12 @@ export default function Lancar({ irParaHistorico }) {
 
   const contas = useLiveQuery(() => db.contas.orderBy('ordem').toArray()) || [];
 
-  const temSubcategorias = subcategorias.length > 0;
+  const recorrencias = useLiveQuery(() => db.recorrencias.where('tipo').equals(tipo).toArray(), [tipo]) || [];
+  const todasCategorias = useLiveQuery(() => db.categorias.toArray()) || [];
+  const todasSubcategorias = useLiveQuery(() => db.subcategorias.toArray()) || [];
+  const categoriaPorId = Object.fromEntries(todasCategorias.map((c) => [c.id, c]));
+  const subcategoriaPorId = Object.fromEntries(todasSubcategorias.map((s) => [s.id, s]));
+  const contaPorId = Object.fromEntries(contas.map((c) => [c.id, c]));
 
   function mudarTipo(novoTipo) {
     setTipo(novoTipo);
@@ -63,9 +73,9 @@ export default function Lancar({ irParaHistorico }) {
   function limparFormulario() {
     setValor(0);
     setNota('');
-    // mantém tipo, data e conta (é comum lançar vários gastos da mesma conta/dia em sequência)
     setCategoriaId(null);
     setSubcategoriaId(null);
+    setRepetirMensalmente(false);
   }
 
   async function salvar(e) {
@@ -81,23 +91,44 @@ export default function Lancar({ irParaHistorico }) {
 
     setSalvando(true);
     try {
-      await db.entries.add({
-        tipo,
-        valor,
-        data,
-        categoriaId,
-        subcategoriaId: subcategoriaId ?? null,
-        contaId: contaId ?? null,
-        nota: nota.trim(),
-        origem: 'manual',
-        externalId: null,
-        criadoEm: new Date().toISOString()
-      });
-      setMensagem('Lançamento salvo ✓');
+      if (repetirMensalmente) {
+        await criarRecorrencia({
+          tipo,
+          valor,
+          categoriaId,
+          subcategoriaId: subcategoriaId ?? null,
+          contaId: contaId ?? null,
+          nota: nota.trim(),
+          dataInicio: data
+        });
+        setMensagem('Lançamento fixo criado ✓ — vai repetir todo mês');
+      } else {
+        await db.entries.add({
+          tipo,
+          valor,
+          data,
+          categoriaId,
+          subcategoriaId: subcategoriaId ?? null,
+          contaId: contaId ?? null,
+          nota: nota.trim(),
+          origem: 'manual',
+          externalId: null,
+          recorrenciaId: null,
+          criadoEm: new Date().toISOString()
+        });
+        setMensagem('Lançamento salvo ✓');
+      }
       limparFormulario();
     } finally {
       setSalvando(false);
     }
+  }
+
+  function descreverRecorrencia(rec) {
+    const cat = categoriaPorId[rec.categoriaId]?.nome || '(sem categoria)';
+    const sub = rec.subcategoriaId && subcategoriaPorId[rec.subcategoriaId] ? ` › ${subcategoriaPorId[rec.subcategoriaId].nome}` : '';
+    const conta = rec.contaId && contaPorId[rec.contaId] ? ` · ${contaPorId[rec.contaId].nome}` : '';
+    return `${cat}${sub}${conta} · dia ${rec.diaDoMes}`;
   }
 
   return (
@@ -138,7 +169,7 @@ export default function Lancar({ irParaHistorico }) {
           placeholder="Selecione a categoria"
         />
 
-        {(temSubcategorias || subcategorias.length === 0) && categoriaId && (
+        {categoriaId && (
           <EditableSelect
             label="Subcategoria (opcional)"
             options={subcategorias}
@@ -169,12 +200,60 @@ export default function Lancar({ irParaHistorico }) {
           />
         </div>
 
+        <label className="switch-row">
+          <span className="switch-label"><IconRepeat size={17} /> Repetir todo mês</span>
+          <span className={`switch ${repetirMensalmente ? 'ativo' : ''}`} onClick={() => setRepetirMensalmente((v) => !v)} />
+        </label>
+
         {mensagem && <p className="mensagem">{mensagem}</p>}
 
         <button type="submit" className="btn-primary" disabled={salvando}>
           {salvando ? 'Salvando...' : 'Salvar lançamento'}
         </button>
       </form>
+
+      {recorrencias.length > 0 && (
+        <>
+          <h2>Lançamentos fixos — {TIPOS[tipo].label.toLowerCase()}</h2>
+          <ul className="lista-entries">
+            {recorrencias.map((rec) => (
+              <li key={rec.id} className="entry-item">
+                <div className="entry-linha">
+                  <div className="entry-clickable" style={{ cursor: 'default' }}>
+                    <span className="entry-dot" style={{ background: rec.ativa ? TIPOS[tipo].cor : '#c7c7cc' }} />
+                    <div className="entry-info">
+                      <div className="entry-categoria">{descreverRecorrencia(rec)}</div>
+                      <div className="entry-detalhe">{rec.ativa ? 'Ativo' : 'Pausado'}</div>
+                    </div>
+                    <div className="entry-valor" style={{ color: rec.ativa ? TIPOS[tipo].cor : '#c7c7cc' }}>
+                      {formatCurrency(rec.valor)}
+                    </div>
+                  </div>
+                  <button
+                    type="button"
+                    className="btn-excluir-mini"
+                    title={rec.ativa ? 'Pausar' : 'Retomar'}
+                    onClick={() => alternarRecorrencia(rec.id, !rec.ativa)}
+                  >
+                    <IconRepeat size={17} />
+                  </button>
+                  <button type="button" className="btn-excluir-mini" onClick={() => setExcluindoRecId(rec.id)}>
+                    <IconTrash />
+                  </button>
+                </div>
+              </li>
+            ))}
+          </ul>
+        </>
+      )}
+
+      <ConfirmDialog
+        open={excluindoRecId !== null}
+        title="Excluir lançamento fixo?"
+        message="Os lançamentos já gerados continuam no histórico — só para de criar novos a partir de agora."
+        onConfirm={async () => { await excluirRecorrencia(excluindoRecId); setExcluindoRecId(null); }}
+        onCancel={() => setExcluindoRecId(null)}
+      />
     </div>
   );
 }

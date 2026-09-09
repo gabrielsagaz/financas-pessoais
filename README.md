@@ -59,6 +59,23 @@ Registradas em comentário no topo de `src/db/db.js`, resumindo aqui:
 5. Categorias/subcategorias são livres (você cria/edita/exclui à vontade);
    a planilha original só serviu de carga inicial.
 
+## Funcionalidades adicionadas (v2 do banco local)
+
+- **Lançamentos fixos** (`src/db/recorrencias.js`): ao marcar "Repetir todo
+  mês" na tela Lançar, cria-se uma `recorrencia` que gera um lançamento novo
+  todo mês automaticamente (mesmo que o app fique fechado por vários meses
+  — ao abrir, ele gera os que faltaram, "clampando" o dia em meses mais
+  curtos). Pausar/excluir a recorrência não apaga o histórico já gerado.
+- **Orçamento por categoria** (tabela `orcamentos`): limite mensal opcional
+  por categoria de despesa, configurado em Categorias. O Resumo mostra o
+  progresso quando um mês específico está selecionado.
+- **PIN de acesso** (tabela `configuracoes` + `src/db/security.js`): trava
+  simples com hash local (SHA-256), sem servidor. Não há biometria ainda —
+  ficou registrado no `ROADMAP.md` como algo a avaliar depois.
+
+Veja `ROADMAP.md` para a lista completa de melhorias planejadas e suas
+prioridades.
+
 ## Stack
 
 React + Vite, Dexie.js (IndexedDB), Recharts, PWA manual (manifest +

@@ -19,6 +19,18 @@ import { RECEITAS_HISTORICO, DESPESAS_HISTORICO, INVESTIMENTOS_HISTORICO } from 
 //   - Contas (`accounts`) são só etiquetas informativas nesta fase — não têm
 //     saldo. Na Fase 2, dá pra adicionar um campo `saldoInicial` sem quebrar
 //     nada do que já existe.
+//
+// v2 adiciona:
+//   - `recorrencias`: definição de um lançamento fixo mensal (valor,
+//     categoria, conta, dia do mês). `entries.recorrenciaId` liga cada
+//     lançamento gerado de volta à recorrência que o originou — sem isso não
+//     dá pra saber quais lançamentos são "fixos" nem evitar duplicá-los.
+//   - `orcamentos`: limite mensal opcional por categoria (hoje pensado pra
+//     despesas). `&categoriaId` = índice único, então cada categoria tem no
+//     máximo um orçamento.
+//   - `configuracoes`: par chave/valor genérico — hoje guarda só o hash do
+//     PIN de acesso, mas serve pra qualquer configuração futura sem precisar
+//     de mais uma tabela.
 // ---------------------------------------------------------------------------
 
 export const db = new Dexie('financas-pessoais');
@@ -28,6 +40,19 @@ db.version(1).stores({
   subcategorias: '++id, categoriaId, ordem',
   contas: '++id, ordem',
   entries: '++id, tipo, data, categoriaId, subcategoriaId, contaId, [tipo+data]'
+});
+
+// v2 — Fase 2 (parte 1): lançamentos fixos/recorrentes, orçamento por
+// categoria e um armazém de configurações simples (usado hoje pelo PIN de
+// acesso). Só ADICIONA tabelas/índice — dados existentes não são tocados.
+db.version(2).stores({
+  categorias: '++id, tipo, ordem',
+  subcategorias: '++id, categoriaId, ordem',
+  contas: '++id, ordem',
+  entries: '++id, tipo, data, categoriaId, subcategoriaId, contaId, recorrenciaId, [tipo+data]',
+  recorrencias: '++id, tipo',
+  orcamentos: '++id, &categoriaId',
+  configuracoes: '++id, &chave'
 });
 
 // -------------------------- Seed inicial (1x) -------------------------------
@@ -89,6 +114,7 @@ async function seedHistorico(tipo, lista, categoriaIdPorTipoNome, contaIdPorNome
       nota: '',
       origem: 'manual',
       externalId: null,
+      recorrenciaId: null,
       criadoEm: new Date().toISOString()
     });
   }

@@ -74,3 +74,22 @@ export function IconChevron({ size = 16, open = false }) {
     </svg>
   );
 }
+
+export function IconLock({ size = 40 }) {
+  return (
+    <svg width={size} height={size} {...base} strokeWidth={1.6}>
+      <rect x="5" y="11" width="14" height="10" rx="2.5" />
+      <path d="M8 11V7.5a4 4 0 0 1 8 0V11" />
+      <circle cx="12" cy="16" r="1.2" fill="currentColor" stroke="none" />
+    </svg>
+  );
+}
+
+export function IconRepeat({ size = 18 }) {
+  return (
+    <svg width={size} height={size} {...base} strokeWidth={1.7}>
+      <path d="M4 12a8 8 0 0 1 14.5-4.5M20 12a8 8 0 0 1-14.5 4.5" />
+      <path d="M18.5 3.5v4h-4M5.5 20.5v-4h4" />
+    </svg>
+  );
+}

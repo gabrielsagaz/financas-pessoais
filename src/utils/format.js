@@ -41,3 +41,21 @@ export function formatPercent(value) {
   const num = Number(value) || 0;
   return `${num.toFixed(1).replace('.', ',')}%`;
 }
+
+// Quantidade de dias de um mês (mes 1-12) — usado pra "clampar" o dia de
+// lançamentos fixos em meses mais curtos (ex: dia 31 cai pra 28/29 em
+// fevereiro).
+export function ultimoDiaDoMes(ano, mes) {
+  return new Date(ano, mes, 0).getDate();
+}
+
+export function montarDataISO(ano, mes, dia) {
+  const diaClampado = Math.min(dia, ultimoDiaDoMes(ano, mes));
+  return `${ano}-${String(mes).padStart(2, '0')}-${String(diaClampado).padStart(2, '0')}`;
+}
+
+// "2026-09" do mês atual — usado como chave de controle de recorrências.
+export function anoMesAtualChave() {
+  const { ano, mes } = anoMesDe(hojeISO());
+  return `${ano}-${String(mes).padStart(2, '0')}`;
+}

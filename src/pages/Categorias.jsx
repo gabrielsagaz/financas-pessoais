@@ -4,6 +4,9 @@ import { db } from '../db/db';
 import { TIPOS } from '../db/defaultData';
 import ConfirmDialog from '../components/ConfirmDialog';
 import { IconTrash, IconChevron } from '../components/Icons';
+import MoneyInput from '../components/MoneyInput';
+import PinPad from '../components/PinPad';
+import { definirPin, removerPin, pinEstaAtivo } from '../db/security';
 
 export default function Categorias() {
   const [tipoAtivo, setTipoAtivo] = useState('despesa');
@@ -30,6 +33,9 @@ export default function Categorias() {
 
       <h2 style={{ marginTop: 32 }}>Contas</h2>
       <ListaContas />
+
+      <h2 style={{ marginTop: 32 }}>Segurança</h2>
+      <Seguranca />
     </div>
   );
 }
@@ -63,6 +69,7 @@ function ListaCategorias({ tipo }) {
         return;
       }
       await db.subcategorias.where('categoriaId').equals(id).delete();
+      await db.orcamentos.where('categoriaId').equals(id).delete();
       await db.categorias.delete(id);
     } else {
       const usada = await db.entries.where('subcategoriaId').equals(id).count();
@@ -101,7 +108,10 @@ function ListaCategorias({ tipo }) {
           </div>
 
           {expandidaId === cat.id && (
-            <Subcategorias categoriaId={cat.id} onExcluir={(id) => setExcluindo({ tipo: 'subcategoria', id })} />
+            <>
+              <Subcategorias categoriaId={cat.id} onExcluir={(id) => setExcluindo({ tipo: 'subcategoria', id })} />
+              {tipo === 'despesa' && <OrcamentoCategoria categoriaId={cat.id} />}
+            </>
           )}
         </div>
       ))}
@@ -165,6 +175,90 @@ function Subcategorias({ categoriaId, onExcluir }) {
         />
         <button type="button" className="btn-confirm" onClick={adicionar}>+</button>
       </div>
+    </div>
+  );
+}
+
+function OrcamentoCategoria({ categoriaId }) {
+  const orcamento = useLiveQuery(() => db.orcamentos.where('categoriaId').equals(categoriaId).first(), [categoriaId]);
+  const valorAtual = orcamento?.limite ?? 0;
+
+  async function salvar(novoValor) {
+    if (novoValor <= 0) {
+      if (orcamento) await db.orcamentos.delete(orcamento.id);
+      return;
+    }
+    if (orcamento) {
+      await db.orcamentos.update(orcamento.id, { limite: novoValor });
+    } else {
+      await db.orcamentos.add({ categoriaId, limite: novoValor });
+    }
+  }
+
+  return (
+    <div className="orcamento-field">
+      <label>Orçamento mensal (opcional)</label>
+      <MoneyInput value={valorAtual} onChange={salvar} />
+    </div>
+  );
+}
+
+function Seguranca() {
+  const ativo = useLiveQuery(() => pinEstaAtivo(), []);
+  const [configurando, setConfigurando] = useState(false);
+  const [etapa, setEtapa] = useState('criar'); // 'criar' | 'confirmar'
+  const [primeiroPin, setPrimeiroPin] = useState('');
+  const [erro, setErro] = useState('');
+
+  function iniciarConfiguracao() {
+    setConfigurando(true);
+    setEtapa('criar');
+    setPrimeiroPin('');
+    setErro('');
+  }
+
+  async function receberPin(pin) {
+    if (etapa === 'criar') {
+      setPrimeiroPin(pin);
+      setEtapa('confirmar');
+    } else {
+      if (pin === primeiroPin) {
+        await definirPin(pin);
+        setConfigurando(false);
+      } else {
+        setErro('Os códigos não coincidem. Tente de novo.');
+        setEtapa('criar');
+        setPrimeiroPin('');
+      }
+    }
+  }
+
+  async function desativar() {
+    await removerPin();
+  }
+
+  return (
+    <div className="seguranca-box">
+      {!configurando ? (
+        <>
+          <div className="seguranca-status">
+            <span>PIN de acesso</span>
+            <strong>{ativo ? 'Ativado' : 'Desativado'}</strong>
+          </div>
+          {ativo ? (
+            <button type="button" className="btn-cancel" onClick={desativar}>Desativar PIN</button>
+          ) : (
+            <button type="button" className="btn-confirm" onClick={iniciarConfiguracao}>Configurar PIN</button>
+          )}
+        </>
+      ) : (
+        <div className="pin-setup">
+          <p className="lock-subtitulo">{etapa === 'criar' ? 'Crie um código de 4 dígitos' : 'Digite de novo pra confirmar'}</p>
+          {erro && <p className="mensagem erro">{erro}</p>}
+          <PinPad key={etapa} onComplete={receberPin} />
+          <button type="button" className="btn-cancel" onClick={() => setConfigurando(false)}>Cancelar</button>
+        </div>
+      )}
     </div>
   );
 }

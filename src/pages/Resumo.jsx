@@ -11,10 +11,11 @@ import AllocationBar from '../components/AllocationBar';
 
 export default function Resumo() {
   const [ano, setAno] = useState(new Date().getFullYear());
-  const [mes, setMes] = useState(0); // 0 = ano inteiro
+  const [mes, setMes] = useState(new Date().getMonth() + 1); // padrão: mês atual
 
   const entradas = useLiveQuery(() => db.entries.toArray(), []) || [];
   const categorias = useLiveQuery(() => db.categorias.toArray(), []) || [];
+  const orcamentos = useLiveQuery(() => db.orcamentos.toArray(), []) || [];
   const categoriaPorId = useMemo(() => Object.fromEntries(categorias.map((c) => [c.id, c])), [categorias]);
 
   const anosDisponiveis = useMemo(() => {
@@ -70,6 +71,27 @@ export default function Resumo() {
       .map(([nome, valor]) => ({ nome, valor }))
       .sort((a, b) => b.valor - a.valor);
   }, [entradasDoPeriodo, categoriaPorId]);
+
+  // Orçamento por categoria: só faz sentido comparar com um mês específico
+  // (o limite é mensal — comparar com "ano inteiro" distorceria a conta).
+  const totalDespesaPorCategoriaId = useMemo(() => {
+    const mapa = {};
+    for (const e of entradasDoPeriodo) {
+      if (e.tipo !== 'despesa') continue;
+      mapa[e.categoriaId] = (mapa[e.categoriaId] || 0) + e.valor;
+    }
+    return mapa;
+  }, [entradasDoPeriodo]);
+
+  const orcamentosComGasto = useMemo(() => {
+    return orcamentos
+      .map((o) => ({
+        ...o,
+        nomeCategoria: categoriaPorId[o.categoriaId]?.nome || '—',
+        gasto: totalDespesaPorCategoriaId[o.categoriaId] || 0
+      }))
+      .sort((a, b) => (b.gasto / b.limite) - (a.gasto / a.limite));
+  }, [orcamentos, totalDespesaPorCategoriaId, categoriaPorId]);
 
   return (
     <div className="page">
@@ -151,6 +173,38 @@ export default function Resumo() {
             </PieChart>
           </ResponsiveContainer>
         </div>
+      )}
+
+      {orcamentos.length > 0 && (
+        <>
+          <h2>Orçamento por categoria</h2>
+          {mes === 0 ? (
+            <p className="vazio">Selecione um mês específico para acompanhar o orçamento.</p>
+          ) : (
+            <div className="chart-box orcamento-lista">
+              {orcamentosComGasto.map((o) => {
+                const percentual = o.limite > 0 ? Math.min(100, (o.gasto / o.limite) * 100) : 0;
+                const estourou = o.gasto > o.limite;
+                return (
+                  <div key={o.id} className="orcamento-item">
+                    <div className="orcamento-topo">
+                      <span>{o.nomeCategoria}</span>
+                      <span style={{ color: estourou ? 'var(--red)' : 'var(--text-secondary)' }}>
+                        {formatCurrency(o.gasto)} / {formatCurrency(o.limite)}
+                      </span>
+                    </div>
+                    <div className="orcamento-barra">
+                      <div
+                        className="orcamento-barra-fill"
+                        style={{ width: `${percentual}%`, background: estourou ? 'var(--red)' : 'var(--blue)' }}
+                      />
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          )}
+        </>
       )}
     </div>
   );

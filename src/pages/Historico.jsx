@@ -6,7 +6,7 @@ import { formatCurrency, formatDateBR, NOMES_MESES, anoMesDe } from '../utils/fo
 import EditableSelect from '../components/EditableSelect';
 import MoneyInput from '../components/MoneyInput';
 import ConfirmDialog from '../components/ConfirmDialog';
-import { IconTrash } from '../components/Icons';
+import { IconTrash, IconRepeat } from '../components/Icons';
 
 export default function Historico() {
   const [filtroTipo, setFiltroTipo] = useState('todos');
@@ -87,6 +87,7 @@ export default function Historico() {
                       {categoriaPorId[entry.categoriaId]?.nome || '(sem categoria)'}
                       {entry.subcategoriaId && subcategoriaPorId[entry.subcategoriaId] &&
                         ` › ${subcategoriaPorId[entry.subcategoriaId].nome}`}
+                      {entry.recorrenciaId && <IconRepeat size={13} />}
                     </div>
                     <div className="entry-detalhe">
                       {formatDateBR(entry.data)}

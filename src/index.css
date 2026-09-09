@@ -461,3 +461,165 @@ input:focus, select:focus {
 .dialog-box h3 { margin: 0 0 8px; font-size: 17px; font-weight: 600; }
 .dialog-box p { margin: 0 0 18px; font-size: 14px; color: var(--text-secondary); line-height: 1.4; }
 .dialog-actions { display: flex; gap: 10px; justify-content: flex-end; }
+
+/* ---------- Ícone inline dentro do texto (ex: selo de "fixo") ---------- */
+.entry-categoria svg {
+  vertical-align: -2px;
+  margin-left: 5px;
+  color: var(--text-secondary);
+}
+
+/* ---------- Toggle (switch) estilo iOS ---------- */
+.switch-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 2px 0;
+  cursor: pointer;
+}
+
+.switch-label {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 15px;
+  color: var(--text);
+  font-weight: 500;
+}
+
+.switch {
+  width: 48px;
+  height: 28px;
+  border-radius: 999px;
+  background: #d2d2d7;
+  position: relative;
+  display: inline-block;
+  transition: background-color 0.2s ease;
+  flex-shrink: 0;
+}
+
+.switch::after {
+  content: '';
+  position: absolute;
+  top: 2px;
+  left: 2px;
+  width: 24px;
+  height: 24px;
+  border-radius: 50%;
+  background: white;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.25);
+  transition: transform 0.2s ease;
+}
+
+.switch.ativo { background: var(--blue); }
+.switch.ativo::after { transform: translateX(20px); }
+
+/* ---------- Orçamento por categoria ---------- */
+.orcamento-field {
+  padding: 10px 12px 14px 24px;
+  border-top: 1px solid var(--hairline);
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.orcamento-field label { font-size: 13px; color: var(--text-secondary); }
+.orcamento-field .money-input { font-size: 17px; padding: 9px 11px; }
+
+.orcamento-lista { display: flex; flex-direction: column; gap: 16px; padding: 16px; }
+
+.orcamento-topo {
+  display: flex;
+  justify-content: space-between;
+  font-size: 13.5px;
+  margin-bottom: 6px;
+}
+
+.orcamento-barra {
+  height: 7px;
+  border-radius: 5px;
+  background: #ececec;
+  overflow: hidden;
+}
+
+.orcamento-barra-fill { height: 100%; transition: width 0.3s ease; border-radius: 5px; }
+
+/* ---------- Tela de bloqueio (PIN) ---------- */
+.lock-screen {
+  min-height: 100vh;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 4px;
+  padding: 24px;
+  text-align: center;
+}
+
+.lock-icone { color: var(--text-secondary); margin-bottom: 8px; }
+.lock-subtitulo { color: var(--text-secondary); font-size: 14px; margin: 0 0 28px; }
+
+.pinpad { display: flex; flex-direction: column; align-items: center; gap: 32px; }
+
+.pinpad-dots { display: flex; gap: 16px; }
+
+.pinpad-dot {
+  width: 14px;
+  height: 14px;
+  border-radius: 50%;
+  border: 1.5px solid var(--text-secondary);
+  background: transparent;
+  transition: background-color 0.15s ease;
+}
+
+.pinpad-dot.preenchido { background: var(--text); border-color: var(--text); }
+
+.pinpad-dots.shake { animation: shake 0.4s ease; }
+
+@keyframes shake {
+  10%, 90% { transform: translateX(-6px); }
+  20%, 80% { transform: translateX(5px); }
+  30%, 50%, 70% { transform: translateX(-4px); }
+  40%, 60% { transform: translateX(4px); }
+}
+
+.pinpad-grid {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 18px;
+}
+
+.pinpad-tecla {
+  width: 68px;
+  height: 68px;
+  border-radius: 50%;
+  border: none;
+  background: var(--surface);
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.1);
+  font-size: 24px;
+  font-weight: 500;
+  color: var(--text);
+}
+
+.pinpad-tecla:active { background: var(--surface-2); }
+.pinpad-tecla.vazia { background: transparent; box-shadow: none; }
+
+/* ---------- Segurança (Categorias) ---------- */
+.seguranca-box {
+  background: var(--surface);
+  border: 1px solid var(--hairline);
+  border-radius: var(--radius-lg);
+  padding: 16px 18px;
+}
+
+.seguranca-status {
+  display: flex;
+  justify-content: space-between;
+  margin-bottom: 14px;
+  font-size: 15px;
+}
+
+.seguranca-status strong { color: var(--text-secondary); font-weight: 600; }
+
+.pin-setup { display: flex; flex-direction: column; align-items: center; gap: 16px; }
+.pin-setup .btn-cancel { margin-top: 4px; }
