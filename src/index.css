@@ -623,3 +623,18 @@ input:focus, select:focus {
 
 .pin-setup { display: flex; flex-direction: column; align-items: center; gap: 16px; }
 .pin-setup .btn-cancel { margin-top: 4px; }
+
+/* ---------- Opções de repetição (fixo x parcelado) ---------- */
+.repeticao-opcoes {
+  background: var(--surface-2);
+  border-radius: var(--radius-md);
+  padding: 12px;
+  margin-top: -4px;
+}
+
+.repeticao-explicacao {
+  font-size: 13px;
+  color: var(--text-secondary);
+  margin: 4px 2px 0;
+  line-height: 1.4;
+}

@@ -19,10 +19,12 @@ export default function Historico() {
   const categorias = useLiveQuery(() => db.categorias.toArray(), []) || [];
   const subcategorias = useLiveQuery(() => db.subcategorias.toArray(), []) || [];
   const contas = useLiveQuery(() => db.contas.orderBy('ordem').toArray(), []) || [];
+  const recorrencias = useLiveQuery(() => db.recorrencias.toArray(), []) || [];
 
   const categoriaPorId = useMemo(() => Object.fromEntries(categorias.map((c) => [c.id, c])), [categorias]);
   const subcategoriaPorId = useMemo(() => Object.fromEntries(subcategorias.map((s) => [s.id, s])), [subcategorias]);
   const contaPorId = useMemo(() => Object.fromEntries(contas.map((c) => [c.id, c])), [contas]);
+  const recorrenciaPorId = useMemo(() => Object.fromEntries(recorrencias.map((r) => [r.id, r])), [recorrencias]);
 
   const anosDisponiveis = useMemo(() => {
     const anos = new Set(entradas.map((e) => anoMesDe(e.data).ano));
@@ -93,6 +95,8 @@ export default function Historico() {
                       {formatDateBR(entry.data)}
                       {entry.contaId && contaPorId[entry.contaId] && ` · ${contaPorId[entry.contaId].nome}`}
                       {entry.nota && ` · ${entry.nota}`}
+                      {entry.numeroParcela && recorrenciaPorId[entry.recorrenciaId]?.totalParcelas &&
+                        ` · Parcela ${entry.numeroParcela}/${recorrenciaPorId[entry.recorrenciaId].totalParcelas}`}
                     </div>
                   </div>
                   <div className="entry-valor" style={{ color: TIPOS[entry.tipo].cor }}>

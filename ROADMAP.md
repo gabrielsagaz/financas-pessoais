@@ -8,6 +8,11 @@ Mantido aqui pra não se perder entre conversas.
 - [x] **Lançamentos fixos/recorrentes** — repetição mensal automática
   (`src/db/recorrencias.js`), com opção de pausar/retomar/excluir. Marcados
   no Histórico com um ícone de repetição.
+- [x] **Repetição por número fixo de vezes (parcelamento)** — ao criar um
+  lançamento fixo, dá pra escolher "Todo mês" (sem parar) ou "Número de
+  vezes" (ex: compra em 3x no cartão). Parcelada, a recorrência conta as
+  ocorrências e se marca como concluída sozinha depois da última parcela.
+  Histórico mostra "Parcela 2/3", etc.
 - [x] **Orçamento por categoria** — limite mensal opcional por categoria de
   despesa (configurado em Categorias → categoria expandida), com barra de
   progresso no Resumo (só quando um mês específico está selecionado).
@@ -15,6 +20,17 @@ Mantido aqui pra não se perder entre conversas.
   configurado em Categorias → Segurança. Sem biometria por enquanto (Web
   Authentication API é mais complexa e instável entre navegadores — avaliar
   se valer a pena depois).
+
+## Pendência descoberta no uso real
+
+- [ ] **Ver lançamentos fixos futuros com antecedência** — hoje a geração é
+  "sob demanda": o lançamento do mês só é criado quando o app é aberto
+  *naquele mês* (não existe servidor rodando em segundo plano pra gerar com
+  antecedência). Resultado: um lançamento fixo criado em setembro não
+  aparece em outubro até o app ser aberto em outubro. Ideia pra resolver:
+  gerar/mostrar os próximos N meses como uma lista de "próximos
+  lançamentos" (sem contar nos totais do Resumo até a data chegar), pra dar
+  visibilidade do que vem sem esperar o mês virar.
 
 ## Prioridade alta (ainda não iniciado)
 

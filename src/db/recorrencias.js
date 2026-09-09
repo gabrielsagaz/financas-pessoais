@@ -7,8 +7,13 @@ import { anoMesDe, montarDataISO, anoMesAtualChave } from '../utils/format';
 // vez que o app abre, comparamos a última geração de cada recorrência com o
 // mês atual e criamos os lançamentos que faltarem — inclusive vários meses
 // de uma vez, se o app ficou fechado por um tempo.
+//
+// `totalParcelas` é opcional: null/undefined = repete pra sempre (salário,
+// aluguel). Um número (ex: 3) = compra parcelada — para de gerar sozinha
+// depois da última parcela e a recorrência fica marcada como concluída
+// (`ativa: false`).
 
-export async function criarRecorrencia({ tipo, valor, categoriaId, subcategoriaId, contaId, nota, dataInicio }) {
+export async function criarRecorrencia({ tipo, valor, categoriaId, subcategoriaId, contaId, nota, dataInicio, totalParcelas }) {
   const { ano, mes } = anoMesDe(dataInicio);
   const diaDoMes = Number(dataInicio.split('-')[2]);
 
@@ -22,6 +27,7 @@ export async function criarRecorrencia({ tipo, valor, categoriaId, subcategoriaI
     diaDoMes,
     ativa: true,
     dataInicio,
+    totalParcelas: totalParcelas || null,
     ultimaGeracao: null // ainda não gerou nenhum lançamento
   });
 
@@ -43,9 +49,17 @@ async function jaGerouEsteMes(recorrenciaId, ano, mes) {
   return !!existente;
 }
 
+// Gera o lançamento do mês e, se era a última parcela, marca a recorrência
+// como concluída (ativa: false) pra ela parar de gerar sozinha. Devolve
+// `true` se a recorrência acabou de ser concluída (sinal pra quem chamou
+// parar o loop de meses).
 async function gerarLancamentoDoMes(recorrencia, ano, mes) {
   const jaExiste = await jaGerouEsteMes(recorrencia.id, ano, mes);
-  if (jaExiste) return;
+  if (jaExiste) return false;
+
+  const jaGeradas = await db.entries.where('recorrenciaId').equals(recorrencia.id).count();
+  const numeroParcela = jaGeradas + 1;
+  const ehParcelada = !!recorrencia.totalParcelas;
 
   await db.entries.add({
     tipo: recorrencia.tipo,
@@ -58,8 +72,15 @@ async function gerarLancamentoDoMes(recorrencia, ano, mes) {
     origem: 'manual',
     externalId: null,
     recorrenciaId: recorrencia.id,
+    numeroParcela: ehParcelada ? numeroParcela : null,
     criadoEm: new Date().toISOString()
   });
+
+  if (ehParcelada && numeroParcela >= recorrencia.totalParcelas) {
+    await db.recorrencias.update(recorrencia.id, { ativa: false });
+    return true;
+  }
+  return false;
 }
 
 function proximoMes(ano, mes) {
@@ -67,7 +88,8 @@ function proximoMes(ano, mes) {
 }
 
 // Roda no início do app: para cada recorrência ativa, gera todos os meses
-// que faltam entre a última geração e o mês atual (inclusive).
+// que faltam entre a última geração e o mês atual (inclusive) — parando
+// antes se a última parcela for atingida no meio do caminho.
 export async function gerarLancamentosPendentes() {
   const todas = await db.recorrencias.toArray();
   // `ativa` não é indexado de propósito: booleano não é uma chave válida de
@@ -90,8 +112,9 @@ export async function gerarLancamentosPendentes() {
 
     let seguranca = 0; // evita loop infinito em caso de dado corrompido
     while ((ano < anoAtual || (ano === anoAtual && mes <= mesAtual)) && seguranca < 600) {
-      await gerarLancamentoDoMes(recorrencia, ano, mes);
+      const concluiu = await gerarLancamentoDoMes(recorrencia, ano, mes);
       await db.recorrencias.update(recorrencia.id, { ultimaGeracao: `${ano}-${String(mes).padStart(2, '0')}` });
+      if (concluiu) break; // última parcela gerada — não continua pros meses seguintes
       ({ ano, mes } = proximoMes(ano, mes));
       seguranca++;
     }

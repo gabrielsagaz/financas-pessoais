@@ -25,6 +25,10 @@ import { RECEITAS_HISTORICO, DESPESAS_HISTORICO, INVESTIMENTOS_HISTORICO } from 
 //     categoria, conta, dia do mês). `entries.recorrenciaId` liga cada
 //     lançamento gerado de volta à recorrência que o originou — sem isso não
 //     dá pra saber quais lançamentos são "fixos" nem evitar duplicá-los.
+//     `totalParcelas` é opcional: null = repete pra sempre; um número (ex:
+//     3) = compra parcelada, e a recorrência se desativa sozinha depois da
+//     última parcela. `entries.numeroParcela` guarda a posição da parcela
+//     (1, 2, 3...) só quando `totalParcelas` está definido.
 //   - `orcamentos`: limite mensal opcional por categoria (hoje pensado pra
 //     despesas). `&categoriaId` = índice único, então cada categoria tem no
 //     máximo um orçamento.

@@ -19,7 +19,9 @@ export default function Lancar() {
   const [subcategoriaId, setSubcategoriaId] = useState(null);
   const [contaId, setContaId] = useState(null);
   const [nota, setNota] = useState('');
-  const [repetirMensalmente, setRepetirMensalmente] = useState(false);
+  const [repetir, setRepetir] = useState(false);
+  const [modoRepeticao, setModoRepeticao] = useState('infinito'); // 'infinito' | 'parcelas'
+  const [totalParcelas, setTotalParcelas] = useState('3');
   const [salvando, setSalvando] = useState(false);
   const [mensagem, setMensagem] = useState('');
   const [excluindoRecId, setExcluindoRecId] = useState(null);
@@ -75,7 +77,9 @@ export default function Lancar() {
     setNota('');
     setCategoriaId(null);
     setSubcategoriaId(null);
-    setRepetirMensalmente(false);
+    setRepetir(false);
+    setModoRepeticao('infinito');
+    setTotalParcelas('3');
   }
 
   async function salvar(e) {
@@ -88,10 +92,15 @@ export default function Lancar() {
       setMensagem('Selecione uma categoria.');
       return;
     }
+    if (repetir && modoRepeticao === 'parcelas' && (!totalParcelas || Number(totalParcelas) < 2)) {
+      setMensagem('Informe um número de vezes a partir de 2.');
+      return;
+    }
 
     setSalvando(true);
     try {
-      if (repetirMensalmente) {
+      if (repetir) {
+        const parcelas = modoRepeticao === 'parcelas' ? Number(totalParcelas) : null;
         await criarRecorrencia({
           tipo,
           valor,
@@ -99,9 +108,10 @@ export default function Lancar() {
           subcategoriaId: subcategoriaId ?? null,
           contaId: contaId ?? null,
           nota: nota.trim(),
-          dataInicio: data
+          dataInicio: data,
+          totalParcelas: parcelas
         });
-        setMensagem('Lançamento fixo criado ✓ — vai repetir todo mês');
+        setMensagem(parcelas ? `Lançamento parcelado criado ✓ — 1/${parcelas}` : 'Lançamento fixo criado ✓ — vai repetir todo mês');
       } else {
         await db.entries.add({
           tipo,
@@ -201,9 +211,48 @@ export default function Lancar() {
         </div>
 
         <label className="switch-row">
-          <span className="switch-label"><IconRepeat size={17} /> Repetir todo mês</span>
-          <span className={`switch ${repetirMensalmente ? 'ativo' : ''}`} onClick={() => setRepetirMensalmente((v) => !v)} />
+          <span className="switch-label"><IconRepeat size={17} /> Repetir</span>
+          <span className={`switch ${repetir ? 'ativo' : ''}`} onClick={() => setRepetir((v) => !v)} />
         </label>
+
+        {repetir && (
+          <div className="repeticao-opcoes">
+            <div className="tipo-tabs" style={{ marginBottom: 10 }}>
+              <button
+                type="button"
+                className={`tipo-tab ${modoRepeticao === 'infinito' ? 'ativo' : ''}`}
+                style={modoRepeticao === 'infinito' ? { color: 'var(--blue)' } : undefined}
+                onClick={() => setModoRepeticao('infinito')}
+              >
+                Todo mês
+              </button>
+              <button
+                type="button"
+                className={`tipo-tab ${modoRepeticao === 'parcelas' ? 'ativo' : ''}`}
+                style={modoRepeticao === 'parcelas' ? { color: 'var(--blue)' } : undefined}
+                onClick={() => setModoRepeticao('parcelas')}
+              >
+                Número de vezes
+              </button>
+            </div>
+
+            {modoRepeticao === 'infinito' ? (
+              <p className="repeticao-explicacao">Repete todo mês, sem parar — ex: salário, aluguel, plano de saúde.</p>
+            ) : (
+              <div className="field">
+                <label htmlFor="parcelas">Quantas vezes (ex: compra em 3x no cartão)</label>
+                <input
+                  id="parcelas"
+                  type="number"
+                  min="2"
+                  inputMode="numeric"
+                  value={totalParcelas}
+                  onChange={(e) => setTotalParcelas(e.target.value)}
+                />
+              </div>
+            )}
+          </div>
+        )}
 
         {mensagem && <p className="mensagem">{mensagem}</p>}
 
@@ -217,31 +266,14 @@ export default function Lancar() {
           <h2>Lançamentos fixos — {TIPOS[tipo].label.toLowerCase()}</h2>
           <ul className="lista-entries">
             {recorrencias.map((rec) => (
-              <li key={rec.id} className="entry-item">
-                <div className="entry-linha">
-                  <div className="entry-clickable" style={{ cursor: 'default' }}>
-                    <span className="entry-dot" style={{ background: rec.ativa ? TIPOS[tipo].cor : '#c7c7cc' }} />
-                    <div className="entry-info">
-                      <div className="entry-categoria">{descreverRecorrencia(rec)}</div>
-                      <div className="entry-detalhe">{rec.ativa ? 'Ativo' : 'Pausado'}</div>
-                    </div>
-                    <div className="entry-valor" style={{ color: rec.ativa ? TIPOS[tipo].cor : '#c7c7cc' }}>
-                      {formatCurrency(rec.valor)}
-                    </div>
-                  </div>
-                  <button
-                    type="button"
-                    className="btn-excluir-mini"
-                    title={rec.ativa ? 'Pausar' : 'Retomar'}
-                    onClick={() => alternarRecorrencia(rec.id, !rec.ativa)}
-                  >
-                    <IconRepeat size={17} />
-                  </button>
-                  <button type="button" className="btn-excluir-mini" onClick={() => setExcluindoRecId(rec.id)}>
-                    <IconTrash />
-                  </button>
-                </div>
-              </li>
+              <RecorrenciaItem
+                key={rec.id}
+                rec={rec}
+                cor={TIPOS[tipo].cor}
+                descricao={descreverRecorrencia(rec)}
+                onAlternar={() => alternarRecorrencia(rec.id, !rec.ativa)}
+                onExcluir={() => setExcluindoRecId(rec.id)}
+              />
             ))}
           </ul>
         </>
@@ -255,5 +287,44 @@ export default function Lancar() {
         onCancel={() => setExcluindoRecId(null)}
       />
     </div>
+  );
+}
+
+function RecorrenciaItem({ rec, cor, descricao, onAlternar, onExcluir }) {
+  const totalGeradas = useLiveQuery(() => db.entries.where('recorrenciaId').equals(rec.id).count(), [rec.id]);
+  const concluida = !rec.ativa && rec.totalParcelas && totalGeradas >= rec.totalParcelas;
+
+  let status;
+  if (rec.totalParcelas) {
+    status = concluida ? `Concluído (${rec.totalParcelas}/${rec.totalParcelas})` : `Parcela ${totalGeradas ?? '…'}/${rec.totalParcelas}`;
+  } else {
+    status = rec.ativa ? 'Ativo · todo mês' : 'Pausado';
+  }
+
+  const corAtual = rec.ativa ? cor : '#c7c7cc';
+
+  return (
+    <li className="entry-item">
+      <div className="entry-linha">
+        <div className="entry-clickable" style={{ cursor: 'default' }}>
+          <span className="entry-dot" style={{ background: corAtual }} />
+          <div className="entry-info">
+            <div className="entry-categoria">{descricao}</div>
+            <div className="entry-detalhe">{status}</div>
+          </div>
+          <div className="entry-valor" style={{ color: corAtual }}>
+            {formatCurrency(rec.valor)}
+          </div>
+        </div>
+        {!concluida && (
+          <button type="button" className="btn-excluir-mini" title={rec.ativa ? 'Pausar' : 'Retomar'} onClick={onAlternar}>
+            <IconRepeat size={17} />
+          </button>
+        )}
+        <button type="button" className="btn-excluir-mini" onClick={onExcluir}>
+          <IconTrash />
+        </button>
+      </div>
+    </li>
   );
 }
