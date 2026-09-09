@@ -110,7 +110,7 @@ export default function Lancar({ irParaHistorico }) {
             key={key}
             type="button"
             className={`tipo-tab ${tipo === key ? 'ativo' : ''}`}
-            style={tipo === key ? { borderColor: info.cor, color: info.cor } : undefined}
+            style={tipo === key ? { color: info.cor } : undefined}
             onClick={() => mudarTipo(key)}
           >
             {info.label}

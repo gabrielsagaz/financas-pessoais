@@ -6,6 +6,7 @@ import { formatCurrency, formatDateBR, NOMES_MESES, anoMesDe } from '../utils/fo
 import EditableSelect from '../components/EditableSelect';
 import MoneyInput from '../components/MoneyInput';
 import ConfirmDialog from '../components/ConfirmDialog';
+import { IconTrash } from '../components/Icons';
 
 export default function Historico() {
   const [filtroTipo, setFiltroTipo] = useState('todos');
@@ -78,8 +79,8 @@ export default function Historico() {
                 onSalvo={() => setEditandoId(null)}
               />
             ) : (
-              <>
-                <div className="entry-linha" onClick={() => setEditandoId(entry.id)}>
+              <div className="entry-linha">
+                <div className="entry-clickable" onClick={() => setEditandoId(entry.id)}>
                   <span className="entry-dot" style={{ background: TIPOS[entry.tipo].cor }} />
                   <div className="entry-info">
                     <div className="entry-categoria">
@@ -97,10 +98,10 @@ export default function Historico() {
                     {formatCurrency(entry.valor)}
                   </div>
                 </div>
-                <button type="button" className="btn-excluir" onClick={() => setExcluindoId(entry.id)}>
-                  Excluir
+                <button type="button" className="btn-excluir-mini" onClick={() => setExcluindoId(entry.id)}>
+                  <IconTrash />
                 </button>
-              </>
+              </div>
             )}
           </li>
         ))}

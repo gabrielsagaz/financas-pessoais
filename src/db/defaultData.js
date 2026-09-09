@@ -87,8 +87,15 @@ export const CATEGORIAS_PADRAO = [
 
 export const CONTAS_PADRAO = ['Banco do Brasil', 'Itaú', 'Nubank', 'PicPay', 'Dinheiro'];
 
+// Paleta inspirada nas cores de sistema da Apple (systemGreen/Red/Blue),
+// ajustada para ter contraste suficiente como texto sobre fundo branco.
 export const TIPOS = {
-  receita: { label: 'Receita', cor: '#1b8f5a' },
-  despesa: { label: 'Despesa', cor: '#d64545' },
-  investimento: { label: 'Investimento', cor: '#2563eb' }
+  receita: { label: 'Receita', cor: '#1c8a4b' },
+  despesa: { label: 'Despesa', cor: '#d92d20' },
+  investimento: { label: 'Investimento', cor: '#0071e3' }
 };
+
+export const CORES_CATEGORIAS = [
+  '#0071e3', '#ff9f0a', '#1c8a4b', '#af52de', '#ff375f',
+  '#32ade6', '#ffb340', '#8e8e93', '#bf5af2'
+];

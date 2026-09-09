@@ -5,10 +5,9 @@ import {
   PieChart, Pie, Cell
 } from 'recharts';
 import { db } from '../db/db';
-import { TIPOS } from '../db/defaultData';
-import { formatCurrency, formatPercent, NOMES_MESES, anoMesDe } from '../utils/format';
-
-const CORES_PIZZA = ['#1b8f5a', '#2563eb', '#d64545', '#e0a13a', '#7c3aed', '#0891b2', '#c2410c', '#4d7c0f', '#be185d'];
+import { TIPOS, CORES_CATEGORIAS } from '../db/defaultData';
+import { formatCurrency, NOMES_MESES, anoMesDe } from '../utils/format';
+import AllocationBar from '../components/AllocationBar';
 
 export default function Resumo() {
   const [ano, setAno] = useState(new Date().getFullYear());
@@ -86,20 +85,20 @@ export default function Resumo() {
         </select>
       </div>
 
-      <div className="kpi-grid">
-        <div className="kpi-card" style={{ borderColor: TIPOS.receita.cor }}>
+      <div className="kpi-panel">
+        <div className="kpi-cell">
           <span className="kpi-label">Receitas</span>
           <span className="kpi-valor" style={{ color: TIPOS.receita.cor }}>{formatCurrency(totalReceitas)}</span>
         </div>
-        <div className="kpi-card" style={{ borderColor: TIPOS.despesa.cor }}>
+        <div className="kpi-cell">
           <span className="kpi-label">Despesas</span>
           <span className="kpi-valor" style={{ color: TIPOS.despesa.cor }}>{formatCurrency(totalDespesas)}</span>
         </div>
-        <div className="kpi-card" style={{ borderColor: TIPOS.investimento.cor }}>
+        <div className="kpi-cell">
           <span className="kpi-label">Investimentos</span>
           <span className="kpi-valor" style={{ color: TIPOS.investimento.cor }}>{formatCurrency(totalInvestimentos)}</span>
         </div>
-        <div className="kpi-card">
+        <div className="kpi-cell">
           <span className="kpi-label">Saldo</span>
           <span className="kpi-valor" style={{ color: saldo >= 0 ? TIPOS.receita.cor : TIPOS.despesa.cor }}>
             {formatCurrency(saldo)}
@@ -107,15 +106,8 @@ export default function Resumo() {
         </div>
       </div>
 
-      <div className="percent-grid">
-        <div className="percent-card">
-          <span className="kpi-label">% da renda gasta</span>
-          <span className="kpi-valor">{formatPercent(percentGasta)}</span>
-        </div>
-        <div className="percent-card">
-          <span className="kpi-label">% da renda investida</span>
-          <span className="kpi-valor">{formatPercent(percentInvestida)}</span>
-        </div>
+      <div className="chart-box allocation-box">
+        <AllocationBar percentGasta={percentGasta} percentInvestida={percentInvestida} />
       </div>
 
       <h2>Receitas x Despesas x Investimentos — {ano}</h2>
@@ -152,7 +144,7 @@ export default function Resumo() {
                 fontSize={11}
               >
                 {dadosPizza.map((_, idx) => (
-                  <Cell key={idx} fill={CORES_PIZZA[idx % CORES_PIZZA.length]} />
+                  <Cell key={idx} fill={CORES_CATEGORIAS[idx % CORES_CATEGORIAS.length]} />
                 ))}
               </Pie>
               <Tooltip formatter={(v) => formatCurrency(v)} />

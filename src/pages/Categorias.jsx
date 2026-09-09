@@ -3,6 +3,7 @@ import { useLiveQuery } from 'dexie-react-hooks';
 import { db } from '../db/db';
 import { TIPOS } from '../db/defaultData';
 import ConfirmDialog from '../components/ConfirmDialog';
+import { IconTrash, IconChevron } from '../components/Icons';
 
 export default function Categorias() {
   const [tipoAtivo, setTipoAtivo] = useState('despesa');
@@ -17,7 +18,7 @@ export default function Categorias() {
             key={key}
             type="button"
             className={`tipo-tab ${tipoAtivo === key ? 'ativo' : ''}`}
-            style={tipoAtivo === key ? { borderColor: info.cor, color: info.cor } : undefined}
+            style={tipoAtivo === key ? { color: info.cor } : undefined}
             onClick={() => setTipoAtivo(key)}
           >
             {info.label}
@@ -94,9 +95,9 @@ function ListaCategorias({ tipo }) {
               className="btn-excluir-mini"
               onClick={(e) => { e.stopPropagation(); setExcluindo({ tipo: 'categoria', id: cat.id }); }}
             >
-              🗑
+              <IconTrash />
             </button>
-            <span className="expand-icon">{expandidaId === cat.id ? '▲' : '▼'}</span>
+            <span className="expand-icon"><IconChevron open={expandidaId === cat.id} /></span>
           </div>
 
           {expandidaId === cat.id && (
@@ -151,7 +152,7 @@ function Subcategorias({ categoriaId, onExcluir }) {
       {subcategorias.map((sub) => (
         <div key={sub.id} className="subcategoria-item">
           <input value={sub.nome} onChange={(e) => renomear(sub, e.target.value)} />
-          <button type="button" className="btn-excluir-mini" onClick={() => onExcluir(sub.id)}>🗑</button>
+          <button type="button" className="btn-excluir-mini" onClick={() => onExcluir(sub.id)}><IconTrash /></button>
         </div>
       ))}
       <div className="inline-add">
@@ -204,7 +205,7 @@ function ListaContas() {
       {contas.map((conta) => (
         <div key={conta.id} className="subcategoria-item">
           <input value={conta.nome} onChange={(e) => renomear(conta, e.target.value)} />
-          <button type="button" className="btn-excluir-mini" onClick={() => setExcluindoId(conta.id)}>🗑</button>
+          <button type="button" className="btn-excluir-mini" onClick={() => setExcluindoId(conta.id)}><IconTrash /></button>
         </div>
       ))}
       <div className="inline-add">
