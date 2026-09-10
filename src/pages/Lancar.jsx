@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import { useLiveQuery } from 'dexie-react-hooks';
 import { db } from '../db/db';
-import { TIPOS } from '../db/defaultData';
+import { TIPOS, TIPOS_TODOS } from '../db/defaultData';
 import { hojeISO, formatCurrency } from '../utils/format';
 import { criarRecorrencia, alternarRecorrencia, excluirRecorrencia } from '../db/recorrencias';
 import MoneyInput from '../components/MoneyInput';
@@ -17,7 +17,8 @@ export default function Lancar() {
   const [data, setData] = useState(hojeISO());
   const [categoriaId, setCategoriaId] = useState(null);
   const [subcategoriaId, setSubcategoriaId] = useState(null);
-  const [contaId, setContaId] = useState(null);
+  const [contaId, setContaId] = useState(null); // conta única (financeiro) OU conta de ORIGEM (transferência)
+  const [contaDestinoId, setContaDestinoId] = useState(null); // só transferência
   const [nota, setNota] = useState('');
   const [repetir, setRepetir] = useState(false);
   const [modoRepeticao, setModoRepeticao] = useState('infinito'); // 'infinito' | 'parcelas'
@@ -26,8 +27,10 @@ export default function Lancar() {
   const [mensagem, setMensagem] = useState('');
   const [excluindoRecId, setExcluindoRecId] = useState(null);
 
+  const ehTransferencia = tipo === 'transferencia';
+
   const categorias = useLiveQuery(
-    () => db.categorias.where('tipo').equals(tipo).sortBy('ordem'),
+    () => (ehTransferencia ? [] : db.categorias.where('tipo').equals(tipo).sortBy('ordem')),
     [tipo]
   ) || [];
 
@@ -38,7 +41,10 @@ export default function Lancar() {
 
   const contas = useLiveQuery(() => db.contas.orderBy('ordem').toArray()) || [];
 
-  const recorrencias = useLiveQuery(() => db.recorrencias.where('tipo').equals(tipo).toArray(), [tipo]) || [];
+  const recorrencias = useLiveQuery(
+    () => (ehTransferencia ? [] : db.recorrencias.where('tipo').equals(tipo).toArray()),
+    [tipo]
+  ) || [];
   const todasCategorias = useLiveQuery(() => db.categorias.toArray()) || [];
   const todasSubcategorias = useLiveQuery(() => db.subcategorias.toArray()) || [];
   const categoriaPorId = Object.fromEntries(todasCategorias.map((c) => [c.id, c]));
@@ -49,6 +55,8 @@ export default function Lancar() {
     setTipo(novoTipo);
     setCategoriaId(null);
     setSubcategoriaId(null);
+    setContaDestinoId(null);
+    setRepetir(false);
     setMensagem('');
   }
 
@@ -77,6 +85,7 @@ export default function Lancar() {
     setNota('');
     setCategoriaId(null);
     setSubcategoriaId(null);
+    setContaDestinoId(null);
     setRepetir(false);
     setModoRepeticao('infinito');
     setTotalParcelas('3');
@@ -88,7 +97,16 @@ export default function Lancar() {
       setMensagem('Informe um valor maior que zero.');
       return;
     }
-    if (!categoriaId) {
+    if (ehTransferencia) {
+      if (!contaId || !contaDestinoId) {
+        setMensagem('Selecione a conta de origem e a de destino.');
+        return;
+      }
+      if (contaId === contaDestinoId) {
+        setMensagem('Escolha duas contas diferentes.');
+        return;
+      }
+    } else if (!categoriaId) {
       setMensagem('Selecione uma categoria.');
       return;
     }
@@ -99,7 +117,23 @@ export default function Lancar() {
 
     setSalvando(true);
     try {
-      if (repetir) {
+      if (ehTransferencia) {
+        await db.entries.add({
+          tipo: 'transferencia',
+          valor,
+          data,
+          categoriaId: null,
+          subcategoriaId: null,
+          contaId,
+          contaDestinoId,
+          nota: nota.trim(),
+          origem: 'manual',
+          externalId: null,
+          recorrenciaId: null,
+          criadoEm: new Date().toISOString()
+        });
+        setMensagem('Transferência registrada ✓');
+      } else if (repetir) {
         const parcelas = modoRepeticao === 'parcelas' ? Number(totalParcelas) : null;
         await criarRecorrencia({
           tipo,
@@ -146,7 +180,7 @@ export default function Lancar() {
       <h1>Novo lançamento</h1>
 
       <div className="tipo-tabs">
-        {Object.entries(TIPOS).map(([key, info]) => (
+        {Object.entries(TIPOS_TODOS).map(([key, info]) => (
           <button
             key={key}
             type="button"
@@ -170,34 +204,57 @@ export default function Lancar() {
           <input id="data" type="date" value={data} onChange={(e) => setData(e.target.value)} />
         </div>
 
-        <EditableSelect
-          label="Categoria"
-          options={categorias}
-          value={categoriaId}
-          onChange={mudarCategoria}
-          onCreate={criarCategoria}
-          placeholder="Selecione a categoria"
-        />
+        {ehTransferencia ? (
+          <>
+            <EditableSelect
+              label="De (saiu de)"
+              options={contas}
+              value={contaId}
+              onChange={setContaId}
+              onCreate={criarConta}
+              placeholder="Conta de origem"
+            />
+            <EditableSelect
+              label="Para (entrou em)"
+              options={contas.filter((c) => c.id !== contaId)}
+              value={contaDestinoId}
+              onChange={setContaDestinoId}
+              onCreate={criarConta}
+              placeholder="Conta de destino"
+            />
+          </>
+        ) : (
+          <>
+            <EditableSelect
+              label="Categoria"
+              options={categorias}
+              value={categoriaId}
+              onChange={mudarCategoria}
+              onCreate={criarCategoria}
+              placeholder="Selecione a categoria"
+            />
 
-        {categoriaId && (
-          <EditableSelect
-            label="Subcategoria (opcional)"
-            options={subcategorias}
-            value={subcategoriaId}
-            onChange={setSubcategoriaId}
-            onCreate={criarSubcategoria}
-            placeholder="Selecione a subcategoria"
-          />
+            {categoriaId && (
+              <EditableSelect
+                label="Subcategoria (opcional)"
+                options={subcategorias}
+                value={subcategoriaId}
+                onChange={setSubcategoriaId}
+                onCreate={criarSubcategoria}
+                placeholder="Selecione a subcategoria"
+              />
+            )}
+
+            <EditableSelect
+              label="Conta"
+              options={contas}
+              value={contaId}
+              onChange={setContaId}
+              onCreate={criarConta}
+              placeholder="Selecione a conta"
+            />
+          </>
         )}
-
-        <EditableSelect
-          label="Conta"
-          options={contas}
-          value={contaId}
-          onChange={setContaId}
-          onCreate={criarConta}
-          placeholder="Selecione a conta"
-        />
 
         <div className="field">
           <label htmlFor="nota">Observação (opcional)</label>
@@ -210,48 +267,52 @@ export default function Lancar() {
           />
         </div>
 
-        <label className="switch-row">
-          <span className="switch-label"><IconRepeat size={17} /> Repetir</span>
-          <span className={`switch ${repetir ? 'ativo' : ''}`} onClick={() => setRepetir((v) => !v)} />
-        </label>
+        {!ehTransferencia && (
+          <>
+            <label className="switch-row">
+              <span className="switch-label"><IconRepeat size={17} /> Repetir</span>
+              <span className={`switch ${repetir ? 'ativo' : ''}`} onClick={() => setRepetir((v) => !v)} />
+            </label>
 
-        {repetir && (
-          <div className="repeticao-opcoes">
-            <div className="tipo-tabs" style={{ marginBottom: 10 }}>
-              <button
-                type="button"
-                className={`tipo-tab ${modoRepeticao === 'infinito' ? 'ativo' : ''}`}
-                style={modoRepeticao === 'infinito' ? { color: 'var(--blue)' } : undefined}
-                onClick={() => setModoRepeticao('infinito')}
-              >
-                Todo mês
-              </button>
-              <button
-                type="button"
-                className={`tipo-tab ${modoRepeticao === 'parcelas' ? 'ativo' : ''}`}
-                style={modoRepeticao === 'parcelas' ? { color: 'var(--blue)' } : undefined}
-                onClick={() => setModoRepeticao('parcelas')}
-              >
-                Número de vezes
-              </button>
-            </div>
+            {repetir && (
+              <div className="repeticao-opcoes">
+                <div className="tipo-tabs" style={{ marginBottom: 10 }}>
+                  <button
+                    type="button"
+                    className={`tipo-tab ${modoRepeticao === 'infinito' ? 'ativo' : ''}`}
+                    style={modoRepeticao === 'infinito' ? { color: 'var(--blue)' } : undefined}
+                    onClick={() => setModoRepeticao('infinito')}
+                  >
+                    Todo mês
+                  </button>
+                  <button
+                    type="button"
+                    className={`tipo-tab ${modoRepeticao === 'parcelas' ? 'ativo' : ''}`}
+                    style={modoRepeticao === 'parcelas' ? { color: 'var(--blue)' } : undefined}
+                    onClick={() => setModoRepeticao('parcelas')}
+                  >
+                    Número de vezes
+                  </button>
+                </div>
 
-            {modoRepeticao === 'infinito' ? (
-              <p className="repeticao-explicacao">Repete todo mês, sem parar — ex: salário, aluguel, plano de saúde.</p>
-            ) : (
-              <div className="field">
-                <label htmlFor="parcelas">Quantas vezes (ex: compra em 3x no cartão)</label>
-                <input
-                  id="parcelas"
-                  type="number"
-                  min="2"
-                  inputMode="numeric"
-                  value={totalParcelas}
-                  onChange={(e) => setTotalParcelas(e.target.value)}
-                />
+                {modoRepeticao === 'infinito' ? (
+                  <p className="repeticao-explicacao">Repete todo mês, sem parar — ex: salário, aluguel, plano de saúde.</p>
+                ) : (
+                  <div className="field">
+                    <label htmlFor="parcelas">Quantas vezes (ex: compra em 3x no cartão)</label>
+                    <input
+                      id="parcelas"
+                      type="number"
+                      min="2"
+                      inputMode="numeric"
+                      value={totalParcelas}
+                      onChange={(e) => setTotalParcelas(e.target.value)}
+                    />
+                  </div>
+                )}
               </div>
             )}
-          </div>
+          </>
         )}
 
         {mensagem && <p className="mensagem">{mensagem}</p>}

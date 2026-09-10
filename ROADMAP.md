@@ -79,11 +79,35 @@ Mantido aqui pra não se perder entre conversas.
   não mudaria onde os dados ficam guardados. Retomar essa conversa junto com
   "Saldo controlado por conta" / infraestrutura de servidor da Fase 2.
 
+## Concluído (set/2026)
+
+- [x] **Saldo controlado por conta** — entrada na Fase 2 de verdade.
+  Decisões tomadas:
+  - **Cartão de crédito deduz na hora da compra** (não só quando a fatura é
+    paga) — o objetivo é ver gastos já comprometidos, atuais e futuros; o
+    saldo do cartão fica negativo representando a dívida da fatura em
+    aberto.
+  - **Transferência entre contas é um 4º tipo de lançamento** (`transferencia`),
+    fora do `TIPOS` financeiro de propósito — não soma nem subtrai nos
+    totais de receita/despesa/investimento do Resumo, só move saldo de uma
+    conta pra outra (`src/db/defaultData.js`, `TIPOS_TODOS`).
+  - **Saldo inicial é "o saldo de hoje"**, não recalculado retroativamente
+    a partir do histórico antigo — o usuário informa o valor atual ao
+    ativar, e o app soma/subtrai só o que aconteceu a partir dali
+    (`saldoInicialData`). Uma conta só passa a ter saldo controlado quando
+    isso é explicitamente ativado em Categorias → Contas; até lá continua
+    sendo só etiqueta, como sempre foi.
+  - "Recalibrar" (Categorias → Contas → conta expandida) reposiciona a
+    referência pro saldo de hoje de novo, pra quando o saldo calculado não
+    bater com a realidade (lançamento esquecido, etc).
+  - Saldo por conta aparece em dois lugares: Categorias → Contas (ao lado
+    do nome) e Resumo (seção "Saldo por conta", sempre "agora" — não
+    depende do filtro de ano/mês da tela).
+  - Lógica em `src/db/saldos.js`. Nada disso quebra contas que nunca
+    ativarem — continuam só etiquetas informativas.
+
 ## Prioridade alta (ainda não iniciado)
 
-- [ ] **Saldo controlado por conta** — saldo inicial por conta + saldo
-  corrente calculado (o modelo de dados já foi pensado pra isso desde a
-  Fase 1: `entries.valor` sempre positivo, sinal pelo `tipo`).
 - [ ] **Importação automática do PicPay** — provavelmente exige um
   componente de backend/nuvem (guardar credencial de acesso à API do PicPay,
   buscar transações periodicamente) — é uma mudança de arquitetura maior,

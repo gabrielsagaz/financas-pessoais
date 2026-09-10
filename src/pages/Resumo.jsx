@@ -8,6 +8,7 @@ import { db } from '../db/db';
 import { TIPOS, CORES_CATEGORIAS } from '../db/defaultData';
 import { formatCurrency, NOMES_MESES, anoMesDe } from '../utils/format';
 import { projetarTodasAsRecorrencias } from '../db/recorrencias';
+import { contaTemSaldoControlado, calcularSaldoConta } from '../db/saldos';
 import AllocationBar from '../components/AllocationBar';
 
 export default function Resumo() {
@@ -19,7 +20,18 @@ export default function Resumo() {
   const orcamentos = useLiveQuery(() => db.orcamentos.toArray(), []) || [];
   const recorrencias = useLiveQuery(() => db.recorrencias.toArray(), []) || [];
   const excecoesValor = useLiveQuery(() => db.excecoesValor.toArray(), []) || [];
+  const contas = useLiveQuery(() => db.contas.orderBy('ordem').toArray(), []) || [];
   const categoriaPorId = useMemo(() => Object.fromEntries(categorias.map((c) => [c.id, c])), [categorias]);
+
+  // Saldo por conta é sempre "agora" (não depende do filtro ano/mês da
+  // tela) — calculado a partir de TODOS os lançamentos reais, ignorando
+  // previstos (que ainda não aconteceram de verdade).
+  const contasComSaldo = useMemo(
+    () => contas
+      .filter(contaTemSaldoControlado)
+      .map((c) => ({ ...c, saldoAtual: calcularSaldoConta(c, entradas) })),
+    [contas, entradas]
+  );
 
   const anosDisponiveis = useMemo(() => {
     const anos = new Set(entradas.map((e) => anoMesDe(e.data).ano));
@@ -151,6 +163,22 @@ export default function Resumo() {
       <div className="chart-box allocation-box">
         <AllocationBar percentGasta={percentGasta} percentInvestida={percentInvestida} />
       </div>
+
+      {contasComSaldo.length > 0 && (
+        <>
+          <h2>Saldo por conta</h2>
+          <div className="chart-box saldo-contas-lista">
+            {contasComSaldo.map((c) => (
+              <div key={c.id} className="saldo-conta-linha">
+                <span>{c.nome}</span>
+                <strong style={{ color: c.saldoAtual >= 0 ? TIPOS.receita.cor : TIPOS.despesa.cor }}>
+                  {formatCurrency(c.saldoAtual)}
+                </strong>
+              </div>
+            ))}
+          </div>
+        </>
+      )}
 
       <h2>Receitas x Despesas x Investimentos — {ano}</h2>
       <div className="chart-box">

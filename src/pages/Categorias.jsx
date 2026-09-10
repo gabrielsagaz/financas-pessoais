@@ -1,4 +1,4 @@
-import { useState, useRef } from 'react';
+import { useState, useRef, useMemo } from 'react';
 import { useLiveQuery } from 'dexie-react-hooks';
 import { db } from '../db/db';
 import { TIPOS } from '../db/defaultData';
@@ -9,6 +9,8 @@ import PinPad from '../components/PinPad';
 import { definirPin, removerPin, pinEstaAtivo } from '../db/security';
 import { exportarBackup, baixarBackupComoArquivo, importarBackup, apagarTodosOsLancamentos } from '../db/backup';
 import { contaEhCartao } from '../utils/cartao';
+import { contaTemSaldoControlado, calcularSaldoConta } from '../db/saldos';
+import { formatCurrency, formatDateBR, hojeISO } from '../utils/format';
 
 export default function Categorias() {
   const [tipoAtivo, setTipoAtivo] = useState('despesa');
@@ -359,6 +361,7 @@ function DadosBackup() {
 
 function ListaContas() {
   const contas = useLiveQuery(() => db.contas.orderBy('ordem').toArray()) || [];
+  const entradas = useLiveQuery(() => db.entries.toArray()) || [];
   const [novoNome, setNovoNome] = useState('');
   const [erro, setErro] = useState('');
   const [excluindoId, setExcluindoId] = useState(null);
@@ -391,28 +394,41 @@ function ListaContas() {
   return (
     <div className="lista-contas">
       {erro && <p className="mensagem erro">{erro}</p>}
-      {contas.map((conta) => (
-        <div key={conta.id} className="categoria-card">
-          <div className="categoria-header" onClick={() => setExpandidaId(expandidaId === conta.id ? null : conta.id)}>
-            {contaEhCartao(conta) && <IconCard size={16} />}
-            <input
-              className="categoria-nome-input"
-              value={conta.nome}
-              onClick={(e) => e.stopPropagation()}
-              onChange={(e) => renomear(conta, e.target.value)}
-            />
-            <button
-              type="button"
-              className="btn-excluir-mini"
-              onClick={(e) => { e.stopPropagation(); setExcluindoId(conta.id); }}
-            >
-              <IconTrash />
-            </button>
-            <span className="expand-icon"><IconChevron open={expandidaId === conta.id} /></span>
+      {contas.map((conta) => {
+        const saldoAtual = contaTemSaldoControlado(conta) ? calcularSaldoConta(conta, entradas) : null;
+        return (
+          <div key={conta.id} className="categoria-card">
+            <div className="categoria-header" onClick={() => setExpandidaId(expandidaId === conta.id ? null : conta.id)}>
+              {contaEhCartao(conta) && <IconCard size={16} />}
+              <input
+                className="categoria-nome-input"
+                value={conta.nome}
+                onClick={(e) => e.stopPropagation()}
+                onChange={(e) => renomear(conta, e.target.value)}
+              />
+              {saldoAtual !== null && (
+                <span className="saldo-inline" style={{ color: saldoAtual >= 0 ? 'var(--green)' : 'var(--red)' }}>
+                  {formatCurrency(saldoAtual)}
+                </span>
+              )}
+              <button
+                type="button"
+                className="btn-excluir-mini"
+                onClick={(e) => { e.stopPropagation(); setExcluindoId(conta.id); }}
+              >
+                <IconTrash />
+              </button>
+              <span className="expand-icon"><IconChevron open={expandidaId === conta.id} /></span>
+            </div>
+            {expandidaId === conta.id && (
+              <>
+                <ConfigCartao conta={conta} />
+                <ConfigSaldo conta={conta} entradas={entradas} />
+              </>
+            )}
           </div>
-          {expandidaId === conta.id && <ConfigCartao conta={conta} />}
-        </div>
-      ))}
+        );
+      })}
       <div className="inline-add">
         <input
           type="text"
@@ -431,6 +447,77 @@ function ListaContas() {
         onConfirm={confirmarExclusao}
         onCancel={() => setExcluindoId(null)}
       />
+    </div>
+  );
+}
+
+// Configuração de saldo controlado por conta: o usuário informa o saldo
+// "de hoje" (não recalcula pra trás a partir do histórico antigo) e, a
+// partir da data em que isso foi informado, o app soma/subtrai o que
+// entrou e saiu. Se o saldo não bater com a realidade em algum momento
+// (lançamento esquecido, etc), "recalibrar" reposiciona a referência pro
+// saldo de hoje de novo.
+function ConfigSaldo({ conta, entradas }) {
+  const ativo = contaTemSaldoControlado(conta);
+  const [configurando, setConfigurando] = useState(false);
+  const [valorInicial, setValorInicial] = useState(0);
+  const [valorRecalibrar, setValorRecalibrar] = useState(0);
+
+  const saldoAtual = useMemo(() => calcularSaldoConta(conta, entradas), [conta, entradas]);
+
+  async function confirmarAtivacao() {
+    await db.contas.update(conta.id, { saldoInicial: valorInicial, saldoInicialData: hojeISO() });
+    setConfigurando(false);
+  }
+
+  async function desativar() {
+    await db.contas.update(conta.id, { saldoInicialData: null });
+  }
+
+  async function recalibrar() {
+    await db.contas.update(conta.id, { saldoInicial: valorRecalibrar, saldoInicialData: hojeISO() });
+    setValorRecalibrar(0);
+  }
+
+  return (
+    <div className="config-cartao">
+      <label className="switch-row">
+        <span className="switch-label">Controlar saldo desta conta</span>
+        <span
+          className={`switch ${ativo ? 'ativo' : ''}`}
+          onClick={() => (ativo ? desativar() : setConfigurando((v) => !v))}
+        />
+      </label>
+
+      {!ativo && configurando && (
+        <div className="config-cartao-dias">
+          <div className="field">
+            <label>Saldo de hoje</label>
+            <MoneyInput value={valorInicial} onChange={setValorInicial} autoFocus />
+          </div>
+          <button type="button" className="btn-confirm" onClick={confirmarAtivacao}>Ativar controle de saldo</button>
+        </div>
+      )}
+
+      {ativo && (
+        <>
+          <div className="saldo-atual-linha">
+            <span>Saldo atual</span>
+            <strong style={{ color: saldoAtual >= 0 ? 'var(--green)' : 'var(--red)' }}>{formatCurrency(saldoAtual)}</strong>
+          </div>
+          <p className="repeticao-explicacao">
+            Calculado a partir do saldo informado em {formatDateBR(conta.saldoInicialData)}, somando o que entrou e
+            saiu depois. Se não bater com a realidade, recalibre com o saldo de hoje:
+          </p>
+          <div className="config-cartao-dias">
+            <div className="field">
+              <label>Recalibrar saldo (usa a data de hoje)</label>
+              <MoneyInput value={valorRecalibrar} onChange={setValorRecalibrar} />
+            </div>
+            <button type="button" className="btn-cancel" onClick={recalibrar}>Recalibrar</button>
+          </div>
+        </>
+      )}
     </div>
   );
 }

@@ -652,7 +652,21 @@ input:focus, select:focus {
 
 .entry-fatura { color: #a1a1a6; font-size: 12px; }
 
+.saldo-contas-lista { display: flex; flex-direction: column; gap: 10px; }
+.saldo-conta-linha { display: flex; justify-content: space-between; align-items: center; font-size: 14.5px; }
+.saldo-conta-linha:not(:last-child) { padding-bottom: 10px; border-bottom: 1px solid var(--hairline); }
+
+.saldo-inline { font-size: 13px; font-weight: 600; white-space: nowrap; }
+
+.saldo-atual-linha {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  font-size: 15px;
+}
+
 .config-cartao { padding: 4px 12px 14px; display: flex; flex-direction: column; gap: 12px; }
+.config-cartao + .config-cartao { border-top: 1px solid var(--hairline); padding-top: 14px; }
 .config-cartao-dias { display: flex; flex-direction: column; gap: 10px; }
 .config-cartao-dias .field { flex-direction: row; align-items: center; justify-content: space-between; }
 .config-cartao-dias .field label { margin: 0; }

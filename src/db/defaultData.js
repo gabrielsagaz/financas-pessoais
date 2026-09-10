@@ -95,6 +95,19 @@ export const TIPOS = {
   investimento: { label: 'Investimento', cor: '#0071e3' }
 };
 
+// Transferência entre contas fica de propósito FORA de `TIPOS`: não é um
+// tipo financeiro (não tem categoria, não entra nos totais de
+// receita/despesa/investimento do Resumo). Só existe pra mover saldo de
+// uma conta pra outra. `TIPOS_TODOS` é usado onde a interface precisa
+// listar/colorir os 4 juntos (Lançar, Histórico) — Categorias continua
+// usando só `TIPOS`, porque transferência não tem categoria pra gerenciar.
+export const TIPO_TRANSFERENCIA = { label: 'Transferência', cor: '#8e8e93' };
+export const TIPOS_TODOS = { ...TIPOS, transferencia: TIPO_TRANSFERENCIA };
+
+export function corDoTipo(tipo) {
+  return TIPOS[tipo]?.cor ?? TIPO_TRANSFERENCIA.cor;
+}
+
 export const CORES_CATEGORIAS = [
   '#0071e3', '#ff9f0a', '#1c8a4b', '#af52de', '#ff375f',
   '#32ade6', '#ffb340', '#8e8e93', '#bf5af2'

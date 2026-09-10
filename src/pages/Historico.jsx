@@ -1,7 +1,7 @@
 import { useState, useMemo } from 'react';
 import { useLiveQuery } from 'dexie-react-hooks';
 import { db } from '../db/db';
-import { TIPOS } from '../db/defaultData';
+import { TIPOS, TIPOS_TODOS, corDoTipo } from '../db/defaultData';
 import { formatCurrency, formatDateBR, NOMES_MESES, anoMesDe } from '../utils/format';
 import { projetarTodasAsRecorrencias, criarRecorrencia, definirValorExcecao, removerValorExcecao } from '../db/recorrencias';
 import { calcularFaturaDoLancamento, contaEhCartao } from '../utils/cartao';
@@ -64,8 +64,8 @@ export default function Historico() {
     setExcluindoId(null);
   }
 
-  // Cria uma cópia independente do lançamento (não herda recorrenciaId nem
-  // número de parcela — é um lançamento manual novo) e abre em edição na
+  // Cria uma cópia independente do lançamento (não herda recorrência,
+  // parcela nem, se for transferência, muda as contas) e abre em edição na
   // hora, pra ajustar data/valor rapidamente se for o caso.
   async function duplicar(entry) {
     const novoId = await db.entries.add({
@@ -75,6 +75,7 @@ export default function Historico() {
       categoriaId: entry.categoriaId,
       subcategoriaId: entry.subcategoriaId ?? null,
       contaId: entry.contaId ?? null,
+      contaDestinoId: entry.contaDestinoId ?? null,
       nota: entry.nota || '',
       origem: 'manual',
       externalId: null,
@@ -87,6 +88,7 @@ export default function Historico() {
   }
 
   function descreverFatura(entry) {
+    if (entry.tipo === 'transferencia') return null;
     const conta = contaPorId[entry.contaId];
     if (!conta || !contaEhCartao(conta)) return null;
     const { mesFatura, dataVencimento } = calcularFaturaDoLancamento(entry.data, conta.diaFechamento, conta.diaVencimento);
@@ -100,7 +102,7 @@ export default function Historico() {
       <div className="filtros">
         <select value={filtroTipo} onChange={(e) => setFiltroTipo(e.target.value)}>
           <option value="todos">Todos os tipos</option>
-          {Object.entries(TIPOS).map(([key, info]) => (
+          {Object.entries(TIPOS_TODOS).map(([key, info]) => (
             <option key={key} value={key}>{info.label}</option>
           ))}
         </select>
@@ -143,26 +145,41 @@ export default function Historico() {
                   className="entry-clickable"
                   onClick={() => (entry.previsto ? setEditandoPrevistoChave(chave) : setEditandoId(entry.id))}
                 >
-                  <span className="entry-dot" style={{ background: TIPOS[entry.tipo].cor }} />
+                  <span className="entry-dot" style={{ background: corDoTipo(entry.tipo) }} />
                   <div className="entry-info">
-                    <div className="entry-categoria">
-                      {categoriaPorId[entry.categoriaId]?.nome || '(sem categoria)'}
-                      {entry.subcategoriaId && subcategoriaPorId[entry.subcategoriaId] &&
-                        ` › ${subcategoriaPorId[entry.subcategoriaId].nome}`}
-                      {entry.recorrenciaId && <IconRepeat size={13} />}
-                      {entry.previsto && <span className="tag-previsto">Previsto</span>}
-                      {entry.valorAjustado && <span className="tag-previsto tag-ajustado">Valor ajustado</span>}
-                    </div>
-                    <div className="entry-detalhe">
-                      {formatDateBR(entry.data)}
-                      {entry.contaId && contaPorId[entry.contaId] && ` · ${contaPorId[entry.contaId].nome}`}
-                      {entry.nota && ` · ${entry.nota}`}
-                      {entry.numeroParcela && recorrenciaPorId[entry.recorrenciaId]?.totalParcelas &&
-                        ` · Parcela ${entry.numeroParcela}/${recorrenciaPorId[entry.recorrenciaId].totalParcelas}`}
-                    </div>
+                    {entry.tipo === 'transferencia' ? (
+                      <>
+                        <div className="entry-categoria">
+                          Transferência
+                          {entry.previsto && <span className="tag-previsto">Previsto</span>}
+                        </div>
+                        <div className="entry-detalhe">
+                          {formatDateBR(entry.data)} · {contaPorId[entry.contaId]?.nome || '?'} → {contaPorId[entry.contaDestinoId]?.nome || '?'}
+                          {entry.nota && ` · ${entry.nota}`}
+                        </div>
+                      </>
+                    ) : (
+                      <>
+                        <div className="entry-categoria">
+                          {categoriaPorId[entry.categoriaId]?.nome || '(sem categoria)'}
+                          {entry.subcategoriaId && subcategoriaPorId[entry.subcategoriaId] &&
+                            ` › ${subcategoriaPorId[entry.subcategoriaId].nome}`}
+                          {entry.recorrenciaId && <IconRepeat size={13} />}
+                          {entry.previsto && <span className="tag-previsto">Previsto</span>}
+                          {entry.valorAjustado && <span className="tag-previsto tag-ajustado">Valor ajustado</span>}
+                        </div>
+                        <div className="entry-detalhe">
+                          {formatDateBR(entry.data)}
+                          {entry.contaId && contaPorId[entry.contaId] && ` · ${contaPorId[entry.contaId].nome}`}
+                          {entry.nota && ` · ${entry.nota}`}
+                          {entry.numeroParcela && recorrenciaPorId[entry.recorrenciaId]?.totalParcelas &&
+                            ` · Parcela ${entry.numeroParcela}/${recorrenciaPorId[entry.recorrenciaId].totalParcelas}`}
+                        </div>
+                      </>
+                    )}
                     {fatura && <div className="entry-detalhe entry-fatura">{fatura}</div>}
                   </div>
-                  <div className="entry-valor" style={{ color: TIPOS[entry.tipo].cor }}>
+                  <div className="entry-valor" style={{ color: corDoTipo(entry.tipo) }}>
                     {formatCurrency(entry.valor)}
                   </div>
                 </div>
@@ -200,16 +217,18 @@ function EditarEntry({ entry, onCancelar, onSalvo }) {
   const [categoriaId, setCategoriaId] = useState(entry.categoriaId);
   const [subcategoriaId, setSubcategoriaId] = useState(entry.subcategoriaId);
   const [contaId, setContaId] = useState(entry.contaId);
+  const [contaDestinoId, setContaDestinoId] = useState(entry.contaDestinoId ?? null);
   const [nota, setNota] = useState(entry.nota || '');
   const [repetir, setRepetir] = useState(false);
   const [modoRepeticao, setModoRepeticao] = useState('infinito'); // 'infinito' | 'parcelas'
   const [totalParcelas, setTotalParcelas] = useState('3');
   const [salvando, setSalvando] = useState(false);
 
+  const ehTransferencia = entry.tipo === 'transferencia';
   const jaEhRecorrente = !!entry.recorrenciaId;
 
   const categorias = useLiveQuery(
-    () => db.categorias.where('tipo').equals(entry.tipo).sortBy('ordem'),
+    () => (ehTransferencia ? [] : db.categorias.where('tipo').equals(entry.tipo).sortBy('ordem')),
     [entry.tipo]
   ) || [];
   const subcategorias = useLiveQuery(
@@ -231,7 +250,9 @@ function EditarEntry({ entry, onCancelar, onSalvo }) {
   async function salvar() {
     setSalvando(true);
     try {
-      if (repetir && !jaEhRecorrente) {
+      if (ehTransferencia) {
+        await db.entries.update(entry.id, { valor, data, contaId, contaDestinoId, nota: nota.trim() });
+      } else if (repetir && !jaEhRecorrente) {
         // Transforma este lançamento avulso num lançamento fixo: remove a
         // entrada solta e deixa a recorrência gerar a ocorrência do mesmo
         // mês em seu lugar, já linkada (`recorrenciaId`).
@@ -273,64 +294,77 @@ function EditarEntry({ entry, onCancelar, onSalvo }) {
         <label>Data</label>
         <input type="date" value={data} onChange={(e) => setData(e.target.value)} />
       </div>
-      <EditableSelect label="Categoria" options={categorias} value={categoriaId} onChange={(id) => { setCategoriaId(id); setSubcategoriaId(null); }} onCreate={criarCategoria} />
-      {subcategorias.length > 0 && (
-        <EditableSelect label="Subcategoria" options={subcategorias} value={subcategoriaId} onChange={setSubcategoriaId} onCreate={criarSubcategoria} />
+
+      {ehTransferencia ? (
+        <>
+          <EditableSelect label="De (saiu de)" options={contas} value={contaId} onChange={setContaId} onCreate={criarConta} />
+          <EditableSelect label="Para (entrou em)" options={contas.filter((c) => c.id !== contaId)} value={contaDestinoId} onChange={setContaDestinoId} onCreate={criarConta} />
+        </>
+      ) : (
+        <>
+          <EditableSelect label="Categoria" options={categorias} value={categoriaId} onChange={(id) => { setCategoriaId(id); setSubcategoriaId(null); }} onCreate={criarCategoria} />
+          {subcategorias.length > 0 && (
+            <EditableSelect label="Subcategoria" options={subcategorias} value={subcategoriaId} onChange={setSubcategoriaId} onCreate={criarSubcategoria} />
+          )}
+          <EditableSelect label="Conta" options={contas} value={contaId} onChange={setContaId} onCreate={criarConta} />
+        </>
       )}
-      <EditableSelect label="Conta" options={contas} value={contaId} onChange={setContaId} onCreate={criarConta} />
+
       <div className="field">
         <label>Observação</label>
         <input type="text" value={nota} onChange={(e) => setNota(e.target.value)} />
       </div>
 
-      {jaEhRecorrente ? (
-        <p className="repeticao-explicacao"><IconRepeat size={13} /> Esta é uma ocorrência de um lançamento fixo — pausar ou excluir a recorrência é feito em "Lançar".</p>
-      ) : (
-        <>
-          <label className="switch-row">
-            <span className="switch-label"><IconRepeat size={17} /> Tornar recorrente</span>
-            <span className={`switch ${repetir ? 'ativo' : ''}`} onClick={() => setRepetir((v) => !v)} />
-          </label>
+      {!ehTransferencia && (
+        jaEhRecorrente ? (
+          <p className="repeticao-explicacao"><IconRepeat size={13} /> Esta é uma ocorrência de um lançamento fixo — pausar ou excluir a recorrência é feito em "Lançar".</p>
+        ) : (
+          <>
+            <label className="switch-row">
+              <span className="switch-label"><IconRepeat size={17} /> Tornar recorrente</span>
+              <span className={`switch ${repetir ? 'ativo' : ''}`} onClick={() => setRepetir((v) => !v)} />
+            </label>
 
-          {repetir && (
-            <div className="repeticao-opcoes">
-              <div className="tipo-tabs" style={{ marginBottom: 10 }}>
-                <button
-                  type="button"
-                  className={`tipo-tab ${modoRepeticao === 'infinito' ? 'ativo' : ''}`}
-                  style={modoRepeticao === 'infinito' ? { color: 'var(--blue)' } : undefined}
-                  onClick={() => setModoRepeticao('infinito')}
-                >
-                  Todo mês
-                </button>
-                <button
-                  type="button"
-                  className={`tipo-tab ${modoRepeticao === 'parcelas' ? 'ativo' : ''}`}
-                  style={modoRepeticao === 'parcelas' ? { color: 'var(--blue)' } : undefined}
-                  onClick={() => setModoRepeticao('parcelas')}
-                >
-                  Número de vezes
-                </button>
-              </div>
-
-              {modoRepeticao === 'infinito' ? (
-                <p className="repeticao-explicacao">A partir deste lançamento, vai repetir todo mês, sem parar.</p>
-              ) : (
-                <div className="field">
-                  <label htmlFor="parcelas-edit">Quantas vezes, contando esta (ex: 3 = essa + mais 2)</label>
-                  <input
-                    id="parcelas-edit"
-                    type="number"
-                    min="2"
-                    inputMode="numeric"
-                    value={totalParcelas}
-                    onChange={(e) => setTotalParcelas(e.target.value)}
-                  />
+            {repetir && (
+              <div className="repeticao-opcoes">
+                <div className="tipo-tabs" style={{ marginBottom: 10 }}>
+                  <button
+                    type="button"
+                    className={`tipo-tab ${modoRepeticao === 'infinito' ? 'ativo' : ''}`}
+                    style={modoRepeticao === 'infinito' ? { color: 'var(--blue)' } : undefined}
+                    onClick={() => setModoRepeticao('infinito')}
+                  >
+                    Todo mês
+                  </button>
+                  <button
+                    type="button"
+                    className={`tipo-tab ${modoRepeticao === 'parcelas' ? 'ativo' : ''}`}
+                    style={modoRepeticao === 'parcelas' ? { color: 'var(--blue)' } : undefined}
+                    onClick={() => setModoRepeticao('parcelas')}
+                  >
+                    Número de vezes
+                  </button>
                 </div>
-              )}
-            </div>
-          )}
-        </>
+
+                {modoRepeticao === 'infinito' ? (
+                  <p className="repeticao-explicacao">A partir deste lançamento, vai repetir todo mês, sem parar.</p>
+                ) : (
+                  <div className="field">
+                    <label htmlFor="parcelas-edit">Quantas vezes, contando esta (ex: 3 = essa + mais 2)</label>
+                    <input
+                      id="parcelas-edit"
+                      type="number"
+                      min="2"
+                      inputMode="numeric"
+                      value={totalParcelas}
+                      onChange={(e) => setTotalParcelas(e.target.value)}
+                    />
+                  </div>
+                )}
+              </div>
+            )}
+          </>
+        )
       )}
 
       <div className="edit-actions">
