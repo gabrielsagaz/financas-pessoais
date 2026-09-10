@@ -7,6 +7,7 @@ import {
 import { db } from '../db/db';
 import { TIPOS, CORES_CATEGORIAS } from '../db/defaultData';
 import { formatCurrency, NOMES_MESES, anoMesDe } from '../utils/format';
+import { projetarTodasAsRecorrencias } from '../db/recorrencias';
 import AllocationBar from '../components/AllocationBar';
 
 export default function Resumo() {
@@ -16,6 +17,7 @@ export default function Resumo() {
   const entradas = useLiveQuery(() => db.entries.toArray(), []) || [];
   const categorias = useLiveQuery(() => db.categorias.toArray(), []) || [];
   const orcamentos = useLiveQuery(() => db.orcamentos.toArray(), []) || [];
+  const recorrencias = useLiveQuery(() => db.recorrencias.toArray(), []) || [];
   const categoriaPorId = useMemo(() => Object.fromEntries(categorias.map((c) => [c.id, c])), [categorias]);
 
   const anosDisponiveis = useMemo(() => {
@@ -24,15 +26,26 @@ export default function Resumo() {
     return Array.from(anos).sort((a, b) => b - a);
   }, [entradas]);
 
+  // Previsão dos lançamentos fixos futuros (até dez/{ano} ou até o mês
+  // selecionado, o que for menor) — nunca gravada no banco, só somada aos
+  // números pra dar visão do que ainda vem no período escolhido. Cada item
+  // sai marcado com `previsto: true`.
+  const previsoes = useMemo(
+    () => projetarTodasAsRecorrencias(recorrencias, entradas, ano, mes === 0 ? 12 : mes),
+    [recorrencias, entradas, ano, mes]
+  );
+
   const entradasDoAno = useMemo(
-    () => entradas.filter((e) => anoMesDe(e.data).ano === ano),
-    [entradas, ano]
+    () => [...entradas.filter((e) => anoMesDe(e.data).ano === ano), ...previsoes.filter((p) => anoMesDe(p.data).ano === ano)],
+    [entradas, previsoes, ano]
   );
 
   const entradasDoPeriodo = useMemo(
     () => entradasDoAno.filter((e) => mes === 0 || anoMesDe(e.data).mes === mes),
     [entradasDoAno, mes]
   );
+
+  const temPrevistoNoPeriodo = useMemo(() => entradasDoPeriodo.some((e) => e.previsto), [entradasDoPeriodo]);
 
   function somaPorTipo(lista, tipo) {
     return lista.filter((e) => e.tipo === tipo).reduce((acc, e) => acc + e.valor, 0);
@@ -106,6 +119,12 @@ export default function Resumo() {
           {NOMES_MESES.map((nome, i) => <option key={nome} value={i + 1}>{nome}</option>)}
         </select>
       </div>
+
+      {temPrevistoNoPeriodo && (
+        <p className="aviso-previsao">
+          Inclui lançamentos fixos previstos (ainda não realizados) para meses futuros.
+        </p>
+      )}
 
       <div className="kpi-panel">
         <div className="kpi-cell">
@@ -182,6 +201,9 @@ export default function Resumo() {
             <p className="vazio">Selecione um mês específico para acompanhar o orçamento.</p>
           ) : (
             <div className="chart-box orcamento-lista">
+              {temPrevistoNoPeriodo && (
+                <p className="aviso-previsao aviso-previsao-inline">Valores incluem previsão de lançamentos fixos.</p>
+              )}
               {orcamentosComGasto.map((o) => {
                 const percentual = o.limite > 0 ? Math.min(100, (o.gasto / o.limite) * 100) : 0;
                 const estourou = o.gasto > o.limite;

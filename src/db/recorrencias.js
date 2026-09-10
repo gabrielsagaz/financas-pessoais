@@ -121,6 +121,76 @@ export async function gerarLancamentosPendentes() {
   }
 }
 
+// Projeta (sem gravar nada no banco) as ocorrências futuras de UMA
+// recorrência ativa, do mês seguinte à última geração real até um
+// ano/mês-alvo (inclusive). Usada pra dar visibilidade de lançamentos
+// fixos que ainda não foram materializados em `entries` — ex: mostrar no
+// Resumo/Histórico o que vem por aí antes do mês virar, sem esperar o app
+// ser reaberto naquele mês. `jaGeradas` é quantos lançamentos reais essa
+// recorrência já gerou (pra continuar a contagem de parcela corretamente
+// e parar de projetar depois da última). Cada ocorrência projetada vem
+// marcada com `previsto: true` e sem `id` (nunca existiu no banco).
+export function projetarOcorrencias(recorrencia, jaGeradas, anoAlvo, mesAlvo) {
+  const ocorrencias = [];
+  let { ano, mes } = recorrencia.ultimaGeracao
+    ? anoMesDe(`${recorrencia.ultimaGeracao}-01`)
+    : anoMesDe(recorrencia.dataInicio);
+  if (recorrencia.ultimaGeracao) {
+    ({ ano, mes } = proximoMes(ano, mes));
+  }
+
+  let numeroParcela = jaGeradas;
+  const ehParcelada = !!recorrencia.totalParcelas;
+  let seguranca = 0;
+
+  while ((ano < anoAlvo || (ano === anoAlvo && mes <= mesAlvo)) && seguranca < 600) {
+    numeroParcela++;
+    if (ehParcelada && numeroParcela > recorrencia.totalParcelas) break;
+
+    ocorrencias.push({
+      tipo: recorrencia.tipo,
+      valor: recorrencia.valor,
+      data: montarDataISO(ano, mes, recorrencia.diaDoMes),
+      categoriaId: recorrencia.categoriaId,
+      subcategoriaId: recorrencia.subcategoriaId ?? null,
+      contaId: recorrencia.contaId ?? null,
+      nota: recorrencia.nota || '',
+      recorrenciaId: recorrencia.id,
+      numeroParcela: ehParcelada ? numeroParcela : null,
+      previsto: true
+    });
+
+    if (ehParcelada && numeroParcela >= recorrencia.totalParcelas) break;
+    ({ ano, mes } = proximoMes(ano, mes));
+    seguranca++;
+  }
+
+  return ocorrencias;
+}
+
+// Projeta as ocorrências futuras de TODAS as recorrências ativas até um
+// ano/mês-alvo. `entradasReais` é a lista já carregada de `entries` (evita
+// uma nova consulta ao banco — quem chama já tem isso via useLiveQuery).
+export function projetarTodasAsRecorrencias(recorrencias, entradasReais, anoAlvo, mesAlvo) {
+  const hoje = new Date();
+  const anoAtual = hoje.getFullYear();
+  const mesAtual = hoje.getMonth() + 1;
+
+  // Nada a projetar se o alvo já é passado ou é o mês atual (esse já foi
+  // gerado de verdade quando o app abriu).
+  if (anoAlvo < anoAtual || (anoAlvo === anoAtual && mesAlvo <= mesAtual)) {
+    return [];
+  }
+
+  const ativas = recorrencias.filter((r) => r.ativa);
+  const previsoes = [];
+  for (const recorrencia of ativas) {
+    const jaGeradas = entradasReais.filter((e) => e.recorrenciaId === recorrencia.id).length;
+    previsoes.push(...projetarOcorrencias(recorrencia, jaGeradas, anoAlvo, mesAlvo));
+  }
+  return previsoes;
+}
+
 export async function alternarRecorrencia(id, ativa) {
   await db.recorrencias.update(id, { ativa });
 }

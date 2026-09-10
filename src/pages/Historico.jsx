@@ -3,6 +3,7 @@ import { useLiveQuery } from 'dexie-react-hooks';
 import { db } from '../db/db';
 import { TIPOS } from '../db/defaultData';
 import { formatCurrency, formatDateBR, NOMES_MESES, anoMesDe } from '../utils/format';
+import { projetarTodasAsRecorrencias } from '../db/recorrencias';
 import EditableSelect from '../components/EditableSelect';
 import MoneyInput from '../components/MoneyInput';
 import ConfirmDialog from '../components/ConfirmDialog';
@@ -15,11 +16,23 @@ export default function Historico() {
   const [editandoId, setEditandoId] = useState(null);
   const [excluindoId, setExcluindoId] = useState(null);
 
-  const entradas = useLiveQuery(() => db.entries.orderBy('data').reverse().toArray(), []) || [];
+  const entradasReais = useLiveQuery(() => db.entries.orderBy('data').reverse().toArray(), []) || [];
   const categorias = useLiveQuery(() => db.categorias.toArray(), []) || [];
   const subcategorias = useLiveQuery(() => db.subcategorias.toArray(), []) || [];
   const contas = useLiveQuery(() => db.contas.orderBy('ordem').toArray(), []) || [];
   const recorrencias = useLiveQuery(() => db.recorrencias.toArray(), []) || [];
+
+  // Previsão dos lançamentos fixos futuros pro ano/mês filtrado — mesma
+  // lógica do Resumo (não grava nada no banco, só dá visibilidade).
+  const previsoes = useMemo(
+    () => projetarTodasAsRecorrencias(recorrencias, entradasReais, filtroAno, filtroMes === 0 ? 12 : filtroMes),
+    [recorrencias, entradasReais, filtroAno, filtroMes]
+  );
+
+  const entradas = useMemo(
+    () => [...entradasReais, ...previsoes].sort((a, b) => (a.data < b.data ? 1 : -1)),
+    [entradasReais, previsoes]
+  );
 
   const categoriaPorId = useMemo(() => Object.fromEntries(categorias.map((c) => [c.id, c])), [categorias]);
   const subcategoriaPorId = useMemo(() => Object.fromEntries(subcategorias.map((s) => [s.id, s])), [subcategorias]);
@@ -72,9 +85,11 @@ export default function Historico() {
       {listaFiltrada.length === 0 && <p className="vazio">Nenhum lançamento neste filtro.</p>}
 
       <ul className="lista-entries">
-        {listaFiltrada.map((entry) => (
-          <li key={entry.id} className="entry-item">
-            {editandoId === entry.id ? (
+        {listaFiltrada.map((entry) => {
+          const chave = entry.previsto ? `previsto-${entry.recorrenciaId}-${entry.data}` : entry.id;
+          return (
+          <li key={chave} className={`entry-item${entry.previsto ? ' previsto' : ''}`}>
+            {editandoId === entry.id && !entry.previsto ? (
               <EditarEntry
                 entry={entry}
                 onCancelar={() => setEditandoId(null)}
@@ -82,7 +97,11 @@ export default function Historico() {
               />
             ) : (
               <div className="entry-linha">
-                <div className="entry-clickable" onClick={() => setEditandoId(entry.id)}>
+                <div
+                  className="entry-clickable"
+                  style={entry.previsto ? { cursor: 'default' } : undefined}
+                  onClick={() => !entry.previsto && setEditandoId(entry.id)}
+                >
                   <span className="entry-dot" style={{ background: TIPOS[entry.tipo].cor }} />
                   <div className="entry-info">
                     <div className="entry-categoria">
@@ -90,6 +109,7 @@ export default function Historico() {
                       {entry.subcategoriaId && subcategoriaPorId[entry.subcategoriaId] &&
                         ` › ${subcategoriaPorId[entry.subcategoriaId].nome}`}
                       {entry.recorrenciaId && <IconRepeat size={13} />}
+                      {entry.previsto && <span className="tag-previsto">Previsto</span>}
                     </div>
                     <div className="entry-detalhe">
                       {formatDateBR(entry.data)}
@@ -103,13 +123,16 @@ export default function Historico() {
                     {formatCurrency(entry.valor)}
                   </div>
                 </div>
-                <button type="button" className="btn-excluir-mini" onClick={() => setExcluindoId(entry.id)}>
-                  <IconTrash />
-                </button>
+                {!entry.previsto && (
+                  <button type="button" className="btn-excluir-mini" onClick={() => setExcluindoId(entry.id)}>
+                    <IconTrash />
+                  </button>
+                )}
               </div>
             )}
           </li>
-        ))}
+          );
+        })}
       </ul>
 
       <ConfirmDialog

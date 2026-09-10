@@ -23,14 +23,21 @@ Mantido aqui pra não se perder entre conversas.
 
 ## Pendência descoberta no uso real
 
-- [ ] **Ver lançamentos fixos futuros com antecedência** — hoje a geração é
-  "sob demanda": o lançamento do mês só é criado quando o app é aberto
-  *naquele mês* (não existe servidor rodando em segundo plano pra gerar com
-  antecedência). Resultado: um lançamento fixo criado em setembro não
-  aparece em outubro até o app ser aberto em outubro. Ideia pra resolver:
-  gerar/mostrar os próximos N meses como uma lista de "próximos
-  lançamentos" (sem contar nos totais do Resumo até a data chegar), pra dar
-  visibilidade do que vem sem esperar o mês virar.
+- [x] **Ver lançamentos fixos futuros com antecedência** — a geração
+  continua "sob demanda" (nada é gravado no banco antes da hora), mas agora
+  existe uma PROJEÇÃO calculada na tela (`projetarTodasAsRecorrencias` em
+  `src/db/recorrencias.js`) para qualquer mês/ano futuro selecionado.
+  Integrada direto nos resultados existentes (sem lista separada):
+  - **Resumo**: totais, gráfico mensal, gráfico de categorias e orçamento
+    por categoria passam a incluir os lançamentos fixos futuros previstos
+    quando o período selecionado inclui meses adiante do atual. Aparece um
+    aviso "Inclui lançamentos fixos previstos..." quando isso acontece.
+  - **Histórico**: lançamentos previstos aparecem misturados com os reais
+    (ordenados por data), com opacidade reduzida e uma tag "Previsto" — não
+    têm botão de excluir nem podem ser editados, porque ainda não existem
+    de verdade no banco.
+  - Quando o mês realmente chega e o app é aberto, o lançamento real é
+    gerado normalmente e substitui a versão prevista na lista.
 
 ## Prioridade alta (ainda não iniciado)
 

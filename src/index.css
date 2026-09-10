@@ -335,7 +335,31 @@ input:focus, select:focus {
   overflow: hidden;
 }
 
+.aviso-previsao {
+  font-size: 12.5px;
+  color: var(--text-secondary);
+  background: var(--surface-2);
+  border: 1px dashed var(--hairline);
+  border-radius: var(--radius-md);
+  padding: 8px 12px;
+  margin: 0 0 12px;
+}
+.aviso-previsao-inline { margin: 0 0 10px; }
+
 .entry-item { border-bottom: 1px solid var(--hairline); }
+.entry-item.previsto { opacity: 0.6; }
+.tag-previsto {
+  font-size: 10.5px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.03em;
+  color: var(--text-secondary);
+  border: 1px solid var(--hairline);
+  border-radius: 4px;
+  padding: 1px 5px;
+  margin-left: 6px;
+  white-space: nowrap;
+}
 .entry-item:last-child { border-bottom: none; }
 
 .entry-linha { display: flex; align-items: stretch; }

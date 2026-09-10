@@ -1,0 +1,319 @@
+diff --git a/ROADMAP.md b/ROADMAP.md
+index 144937f..70f35f9 100644
+--- a/ROADMAP.md
++++ b/ROADMAP.md
+@@ -23,14 +23,21 @@ Mantido aqui pra não se perder entre conversas.
+ 
+ ## Pendência descoberta no uso real
+ 
+-- [ ] **Ver lançamentos fixos futuros com antecedência** — hoje a geração é
+-  "sob demanda": o lançamento do mês só é criado quando o app é aberto
+-  *naquele mês* (não existe servidor rodando em segundo plano pra gerar com
+-  antecedência). Resultado: um lançamento fixo criado em setembro não
+-  aparece em outubro até o app ser aberto em outubro. Ideia pra resolver:
+-  gerar/mostrar os próximos N meses como uma lista de "próximos
+-  lançamentos" (sem contar nos totais do Resumo até a data chegar), pra dar
+-  visibilidade do que vem sem esperar o mês virar.
++- [x] **Ver lançamentos fixos futuros com antecedência** — a geração
++  continua "sob demanda" (nada é gravado no banco antes da hora), mas agora
++  existe uma PROJEÇÃO calculada na tela (`projetarTodasAsRecorrencias` em
++  `src/db/recorrencias.js`) para qualquer mês/ano futuro selecionado.
++  Integrada direto nos resultados existentes (sem lista separada):
++  - **Resumo**: totais, gráfico mensal, gráfico de categorias e orçamento
++    por categoria passam a incluir os lançamentos fixos futuros previstos
++    quando o período selecionado inclui meses adiante do atual. Aparece um
++    aviso "Inclui lançamentos fixos previstos..." quando isso acontece.
++  - **Histórico**: lançamentos previstos aparecem misturados com os reais
++    (ordenados por data), com opacidade reduzida e uma tag "Previsto" — não
++    têm botão de excluir nem podem ser editados, porque ainda não existem
++    de verdade no banco.
++  - Quando o mês realmente chega e o app é aberto, o lançamento real é
++    gerado normalmente e substitui a versão prevista na lista.
+ 
+ ## Prioridade alta (ainda não iniciado)
+ 
+diff --git a/src/db/recorrencias.js b/src/db/recorrencias.js
+index 30beb67..be14582 100644
+--- a/src/db/recorrencias.js
++++ b/src/db/recorrencias.js
+@@ -121,6 +121,76 @@ export async function gerarLancamentosPendentes() {
+   }
+ }
+ 
++// Projeta (sem gravar nada no banco) as ocorrências futuras de UMA
++// recorrência ativa, do mês seguinte à última geração real até um
++// ano/mês-alvo (inclusive). Usada pra dar visibilidade de lançamentos
++// fixos que ainda não foram materializados em `entries` — ex: mostrar no
++// Resumo/Histórico o que vem por aí antes do mês virar, sem esperar o app
++// ser reaberto naquele mês. `jaGeradas` é quantos lançamentos reais essa
++// recorrência já gerou (pra continuar a contagem de parcela corretamente
++// e parar de projetar depois da última). Cada ocorrência projetada vem
++// marcada com `previsto: true` e sem `id` (nunca existiu no banco).
++export function projetarOcorrencias(recorrencia, jaGeradas, anoAlvo, mesAlvo) {
++  const ocorrencias = [];
++  let { ano, mes } = recorrencia.ultimaGeracao
++    ? anoMesDe(`${recorrencia.ultimaGeracao}-01`)
++    : anoMesDe(recorrencia.dataInicio);
++  if (recorrencia.ultimaGeracao) {
++    ({ ano, mes } = proximoMes(ano, mes));
++  }
++
++  let numeroParcela = jaGeradas;
++  const ehParcelada = !!recorrencia.totalParcelas;
++  let seguranca = 0;
++
++  while ((ano < anoAlvo || (ano === anoAlvo && mes <= mesAlvo)) && seguranca < 600) {
++    numeroParcela++;
++    if (ehParcelada && numeroParcela > recorrencia.totalParcelas) break;
++
++    ocorrencias.push({
++      tipo: recorrencia.tipo,
++      valor: recorrencia.valor,
++      data: montarDataISO(ano, mes, recorrencia.diaDoMes),
++      categoriaId: recorrencia.categoriaId,
++      subcategoriaId: recorrencia.subcategoriaId ?? null,
++      contaId: recorrencia.contaId ?? null,
++      nota: recorrencia.nota || '',
++      recorrenciaId: recorrencia.id,
++      numeroParcela: ehParcelada ? numeroParcela : null,
++      previsto: true
++    });
++
++    if (ehParcelada && numeroParcela >= recorrencia.totalParcelas) break;
++    ({ ano, mes } = proximoMes(ano, mes));
++    seguranca++;
++  }
++
++  return ocorrencias;
++}
++
++// Projeta as ocorrências futuras de TODAS as recorrências ativas até um
++// ano/mês-alvo. `entradasReais` é a lista já carregada de `entries` (evita
++// uma nova consulta ao banco — quem chama já tem isso via useLiveQuery).
++export function projetarTodasAsRecorrencias(recorrencias, entradasReais, anoAlvo, mesAlvo) {
++  const hoje = new Date();
++  const anoAtual = hoje.getFullYear();
++  const mesAtual = hoje.getMonth() + 1;
++
++  // Nada a projetar se o alvo já é passado ou é o mês atual (esse já foi
++  // gerado de verdade quando o app abriu).
++  if (anoAlvo < anoAtual || (anoAlvo === anoAtual && mesAlvo <= mesAtual)) {
++    return [];
++  }
++
++  const ativas = recorrencias.filter((r) => r.ativa);
++  const previsoes = [];
++  for (const recorrencia of ativas) {
++    const jaGeradas = entradasReais.filter((e) => e.recorrenciaId === recorrencia.id).length;
++    previsoes.push(...projetarOcorrencias(recorrencia, jaGeradas, anoAlvo, mesAlvo));
++  }
++  return previsoes;
++}
++
+ export async function alternarRecorrencia(id, ativa) {
+   await db.recorrencias.update(id, { ativa });
+ }
+diff --git a/src/index.css b/src/index.css
+index 4778c92..7693045 100644
+--- a/src/index.css
++++ b/src/index.css
+@@ -335,7 +335,31 @@ input:focus, select:focus {
+   overflow: hidden;
+ }
+ 
++.aviso-previsao {
++  font-size: 12.5px;
++  color: var(--text-secondary);
++  background: var(--surface-2);
++  border: 1px dashed var(--hairline);
++  border-radius: var(--radius-md);
++  padding: 8px 12px;
++  margin: 0 0 12px;
++}
++.aviso-previsao-inline { margin: 0 0 10px; }
++
+ .entry-item { border-bottom: 1px solid var(--hairline); }
++.entry-item.previsto { opacity: 0.6; }
++.tag-previsto {
++  font-size: 10.5px;
++  font-weight: 700;
++  text-transform: uppercase;
++  letter-spacing: 0.03em;
++  color: var(--text-secondary);
++  border: 1px solid var(--hairline);
++  border-radius: 4px;
++  padding: 1px 5px;
++  margin-left: 6px;
++  white-space: nowrap;
++}
+ .entry-item:last-child { border-bottom: none; }
+ 
+ .entry-linha { display: flex; align-items: stretch; }
+diff --git a/src/pages/Historico.jsx b/src/pages/Historico.jsx
+index 14cb1cc..a248506 100644
+--- a/src/pages/Historico.jsx
++++ b/src/pages/Historico.jsx
+@@ -3,6 +3,7 @@ import { useLiveQuery } from 'dexie-react-hooks';
+ import { db } from '../db/db';
+ import { TIPOS } from '../db/defaultData';
+ import { formatCurrency, formatDateBR, NOMES_MESES, anoMesDe } from '../utils/format';
++import { projetarTodasAsRecorrencias } from '../db/recorrencias';
+ import EditableSelect from '../components/EditableSelect';
+ import MoneyInput from '../components/MoneyInput';
+ import ConfirmDialog from '../components/ConfirmDialog';
+@@ -15,12 +16,24 @@ export default function Historico() {
+   const [editandoId, setEditandoId] = useState(null);
+   const [excluindoId, setExcluindoId] = useState(null);
+ 
+-  const entradas = useLiveQuery(() => db.entries.orderBy('data').reverse().toArray(), []) || [];
++  const entradasReais = useLiveQuery(() => db.entries.orderBy('data').reverse().toArray(), []) || [];
+   const categorias = useLiveQuery(() => db.categorias.toArray(), []) || [];
+   const subcategorias = useLiveQuery(() => db.subcategorias.toArray(), []) || [];
+   const contas = useLiveQuery(() => db.contas.orderBy('ordem').toArray(), []) || [];
+   const recorrencias = useLiveQuery(() => db.recorrencias.toArray(), []) || [];
+ 
++  // Previsão dos lançamentos fixos futuros pro ano/mês filtrado — mesma
++  // lógica do Resumo (não grava nada no banco, só dá visibilidade).
++  const previsoes = useMemo(
++    () => projetarTodasAsRecorrencias(recorrencias, entradasReais, filtroAno, filtroMes === 0 ? 12 : filtroMes),
++    [recorrencias, entradasReais, filtroAno, filtroMes]
++  );
++
++  const entradas = useMemo(
++    () => [...entradasReais, ...previsoes].sort((a, b) => (a.data < b.data ? 1 : -1)),
++    [entradasReais, previsoes]
++  );
++
+   const categoriaPorId = useMemo(() => Object.fromEntries(categorias.map((c) => [c.id, c])), [categorias]);
+   const subcategoriaPorId = useMemo(() => Object.fromEntries(subcategorias.map((s) => [s.id, s])), [subcategorias]);
+   const contaPorId = useMemo(() => Object.fromEntries(contas.map((c) => [c.id, c])), [contas]);
+@@ -72,9 +85,11 @@ export default function Historico() {
+       {listaFiltrada.length === 0 && <p className="vazio">Nenhum lançamento neste filtro.</p>}
+ 
+       <ul className="lista-entries">
+-        {listaFiltrada.map((entry) => (
+-          <li key={entry.id} className="entry-item">
+-            {editandoId === entry.id ? (
++        {listaFiltrada.map((entry) => {
++          const chave = entry.previsto ? `previsto-${entry.recorrenciaId}-${entry.data}` : entry.id;
++          return (
++          <li key={chave} className={`entry-item${entry.previsto ? ' previsto' : ''}`}>
++            {editandoId === entry.id && !entry.previsto ? (
+               <EditarEntry
+                 entry={entry}
+                 onCancelar={() => setEditandoId(null)}
+@@ -82,7 +97,11 @@ export default function Historico() {
+               />
+             ) : (
+               <div className="entry-linha">
+-                <div className="entry-clickable" onClick={() => setEditandoId(entry.id)}>
++                <div
++                  className="entry-clickable"
++                  style={entry.previsto ? { cursor: 'default' } : undefined}
++                  onClick={() => !entry.previsto && setEditandoId(entry.id)}
++                >
+                   <span className="entry-dot" style={{ background: TIPOS[entry.tipo].cor }} />
+                   <div className="entry-info">
+                     <div className="entry-categoria">
+@@ -90,6 +109,7 @@ export default function Historico() {
+                       {entry.subcategoriaId && subcategoriaPorId[entry.subcategoriaId] &&
+                         ` › ${subcategoriaPorId[entry.subcategoriaId].nome}`}
+                       {entry.recorrenciaId && <IconRepeat size={13} />}
++                      {entry.previsto && <span className="tag-previsto">Previsto</span>}
+                     </div>
+                     <div className="entry-detalhe">
+                       {formatDateBR(entry.data)}
+@@ -103,13 +123,16 @@ export default function Historico() {
+                     {formatCurrency(entry.valor)}
+                   </div>
+                 </div>
+-                <button type="button" className="btn-excluir-mini" onClick={() => setExcluindoId(entry.id)}>
+-                  <IconTrash />
+-                </button>
++                {!entry.previsto && (
++                  <button type="button" className="btn-excluir-mini" onClick={() => setExcluindoId(entry.id)}>
++                    <IconTrash />
++                  </button>
++                )}
+               </div>
+             )}
+           </li>
+-        ))}
++          );
++        })}
+       </ul>
+ 
+       <ConfirmDialog
+diff --git a/src/pages/Resumo.jsx b/src/pages/Resumo.jsx
+index d1bb0e2..f3004bf 100644
+--- a/src/pages/Resumo.jsx
++++ b/src/pages/Resumo.jsx
+@@ -7,6 +7,7 @@ import {
+ import { db } from '../db/db';
+ import { TIPOS, CORES_CATEGORIAS } from '../db/defaultData';
+ import { formatCurrency, NOMES_MESES, anoMesDe } from '../utils/format';
++import { projetarTodasAsRecorrencias } from '../db/recorrencias';
+ import AllocationBar from '../components/AllocationBar';
+ 
+ export default function Resumo() {
+@@ -16,6 +17,7 @@ export default function Resumo() {
+   const entradas = useLiveQuery(() => db.entries.toArray(), []) || [];
+   const categorias = useLiveQuery(() => db.categorias.toArray(), []) || [];
+   const orcamentos = useLiveQuery(() => db.orcamentos.toArray(), []) || [];
++  const recorrencias = useLiveQuery(() => db.recorrencias.toArray(), []) || [];
+   const categoriaPorId = useMemo(() => Object.fromEntries(categorias.map((c) => [c.id, c])), [categorias]);
+ 
+   const anosDisponiveis = useMemo(() => {
+@@ -24,9 +26,18 @@ export default function Resumo() {
+     return Array.from(anos).sort((a, b) => b - a);
+   }, [entradas]);
+ 
++  // Previsão dos lançamentos fixos futuros (até dez/{ano} ou até o mês
++  // selecionado, o que for menor) — nunca gravada no banco, só somada aos
++  // números pra dar visão do que ainda vem no período escolhido. Cada item
++  // sai marcado com `previsto: true`.
++  const previsoes = useMemo(
++    () => projetarTodasAsRecorrencias(recorrencias, entradas, ano, mes === 0 ? 12 : mes),
++    [recorrencias, entradas, ano, mes]
++  );
++
+   const entradasDoAno = useMemo(
+-    () => entradas.filter((e) => anoMesDe(e.data).ano === ano),
+-    [entradas, ano]
++    () => [...entradas.filter((e) => anoMesDe(e.data).ano === ano), ...previsoes.filter((p) => anoMesDe(p.data).ano === ano)],
++    [entradas, previsoes, ano]
+   );
+ 
+   const entradasDoPeriodo = useMemo(
+@@ -34,6 +45,8 @@ export default function Resumo() {
+     [entradasDoAno, mes]
+   );
+ 
++  const temPrevistoNoPeriodo = useMemo(() => entradasDoPeriodo.some((e) => e.previsto), [entradasDoPeriodo]);
++
+   function somaPorTipo(lista, tipo) {
+     return lista.filter((e) => e.tipo === tipo).reduce((acc, e) => acc + e.valor, 0);
+   }
+@@ -107,6 +120,12 @@ export default function Resumo() {
+         </select>
+       </div>
+ 
++      {temPrevistoNoPeriodo && (
++        <p className="aviso-previsao">
++          Inclui lançamentos fixos previstos (ainda não realizados) para meses futuros.
++        </p>
++      )}
++
+       <div className="kpi-panel">
+         <div className="kpi-cell">
+           <span className="kpi-label">Receitas</span>
+@@ -182,6 +201,9 @@ export default function Resumo() {
+             <p className="vazio">Selecione um mês específico para acompanhar o orçamento.</p>
+           ) : (
+             <div className="chart-box orcamento-lista">
++              {temPrevistoNoPeriodo && (
++                <p className="aviso-previsao aviso-previsao-inline">Valores incluem previsão de lançamentos fixos.</p>
++              )}
+               {orcamentosComGasto.map((o) => {
+                 const percentual = o.limite > 0 ? Math.min(100, (o.gasto / o.limite) * 100) : 0;
+                 const estourou = o.gasto > o.limite;
