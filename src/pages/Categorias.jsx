@@ -3,11 +3,12 @@ import { useLiveQuery } from 'dexie-react-hooks';
 import { db } from '../db/db';
 import { TIPOS } from '../db/defaultData';
 import ConfirmDialog from '../components/ConfirmDialog';
-import { IconTrash, IconChevron } from '../components/Icons';
+import { IconTrash, IconChevron, IconCard } from '../components/Icons';
 import MoneyInput from '../components/MoneyInput';
 import PinPad from '../components/PinPad';
 import { definirPin, removerPin, pinEstaAtivo } from '../db/security';
 import { exportarBackup, baixarBackupComoArquivo, importarBackup, apagarTodosOsLancamentos } from '../db/backup';
+import { contaEhCartao } from '../utils/cartao';
 
 export default function Categorias() {
   const [tipoAtivo, setTipoAtivo] = useState('despesa');
@@ -361,11 +362,12 @@ function ListaContas() {
   const [novoNome, setNovoNome] = useState('');
   const [erro, setErro] = useState('');
   const [excluindoId, setExcluindoId] = useState(null);
+  const [expandidaId, setExpandidaId] = useState(null);
 
   async function adicionar() {
     const nome = novoNome.trim();
     if (!nome) return;
-    await db.contas.add({ nome, ordem: contas.length, arquivada: false });
+    await db.contas.add({ nome, ordem: contas.length, arquivada: false, tipo: 'conta' });
     setNovoNome('');
   }
 
@@ -390,9 +392,25 @@ function ListaContas() {
     <div className="lista-contas">
       {erro && <p className="mensagem erro">{erro}</p>}
       {contas.map((conta) => (
-        <div key={conta.id} className="subcategoria-item">
-          <input value={conta.nome} onChange={(e) => renomear(conta, e.target.value)} />
-          <button type="button" className="btn-excluir-mini" onClick={() => setExcluindoId(conta.id)}><IconTrash /></button>
+        <div key={conta.id} className="categoria-card">
+          <div className="categoria-header" onClick={() => setExpandidaId(expandidaId === conta.id ? null : conta.id)}>
+            {contaEhCartao(conta) && <IconCard size={16} />}
+            <input
+              className="categoria-nome-input"
+              value={conta.nome}
+              onClick={(e) => e.stopPropagation()}
+              onChange={(e) => renomear(conta, e.target.value)}
+            />
+            <button
+              type="button"
+              className="btn-excluir-mini"
+              onClick={(e) => { e.stopPropagation(); setExcluindoId(conta.id); }}
+            >
+              <IconTrash />
+            </button>
+            <span className="expand-icon"><IconChevron open={expandidaId === conta.id} /></span>
+          </div>
+          {expandidaId === conta.id && <ConfigCartao conta={conta} />}
         </div>
       ))}
       <div className="inline-add">
@@ -413,6 +431,55 @@ function ListaContas() {
         onConfirm={confirmarExclusao}
         onCancel={() => setExcluindoId(null)}
       />
+    </div>
+  );
+}
+
+// Configuração de "cartão de crédito" pra uma conta: dia de fechamento
+// (quando a fatura atual para de acumular) e dia de vencimento (quando essa
+// fatura precisa ser paga). Guardado direto na própria conta — não precisa
+// de tabela nova, só de mais alguns campos.
+function ConfigCartao({ conta }) {
+  const ehCartao = contaEhCartao(conta);
+  const [diaFechamento, setDiaFechamento] = useState(conta.diaFechamento || 1);
+  const [diaVencimento, setDiaVencimento] = useState(conta.diaVencimento || 10);
+
+  async function alternarCartao() {
+    if (ehCartao) {
+      await db.contas.update(conta.id, { tipo: 'conta' });
+    } else {
+      await db.contas.update(conta.id, { tipo: 'cartao', diaFechamento, diaVencimento });
+    }
+  }
+
+  async function salvarDias(campo, valor) {
+    const dia = Math.min(31, Math.max(1, Number(valor) || 1));
+    if (campo === 'fechamento') setDiaFechamento(dia); else setDiaVencimento(dia);
+    await db.contas.update(conta.id, { [campo === 'fechamento' ? 'diaFechamento' : 'diaVencimento']: dia });
+  }
+
+  return (
+    <div className="config-cartao">
+      <label className="switch-row">
+        <span className="switch-label"><IconCard size={17} /> É cartão de crédito</span>
+        <span className={`switch ${ehCartao ? 'ativo' : ''}`} onClick={alternarCartao} />
+      </label>
+
+      {ehCartao && (
+        <div className="config-cartao-dias">
+          <div className="field">
+            <label>Dia de fechamento da fatura</label>
+            <input type="number" min="1" max="31" value={diaFechamento} onChange={(e) => salvarDias('fechamento', e.target.value)} />
+          </div>
+          <div className="field">
+            <label>Dia de vencimento</label>
+            <input type="number" min="1" max="31" value={diaVencimento} onChange={(e) => salvarDias('vencimento', e.target.value)} />
+          </div>
+          <p className="repeticao-explicacao">
+            Compras depois do dia de fechamento entram na fatura seguinte. Isso só organiza a visualização no Histórico — não controla saldo nem gera cobrança automática.
+          </p>
+        </div>
+      )}
     </div>
   );
 }

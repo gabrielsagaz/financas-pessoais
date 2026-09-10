@@ -93,3 +93,22 @@ export function IconRepeat({ size = 18 }) {
     </svg>
   );
 }
+
+export function IconCopy({ size = 18 }) {
+  return (
+    <svg width={size} height={size} {...base} strokeWidth={1.6}>
+      <rect x="8.5" y="8.5" width="11" height="11" rx="2" />
+      <path d="M15.5 8.5V6.5A2 2 0 0 0 13.5 4.5h-8a2 2 0 0 0-2 2v8a2 2 0 0 0 2 2h2" />
+    </svg>
+  );
+}
+
+export function IconCard({ size = 18 }) {
+  return (
+    <svg width={size} height={size} {...base} strokeWidth={1.6}>
+      <rect x="3" y="6" width="18" height="13" rx="2.2" />
+      <path d="M3 10.5h18" />
+      <path d="M6.5 15h4" />
+    </svg>
+  );
+}

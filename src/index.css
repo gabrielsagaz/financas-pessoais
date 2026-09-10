@@ -648,6 +648,16 @@ input:focus, select:focus {
 .pin-setup { display: flex; flex-direction: column; align-items: center; gap: 16px; }
 .pin-setup .btn-cancel { margin-top: 4px; }
 
+.tag-ajustado { border-color: var(--blue); color: var(--blue); }
+
+.entry-fatura { color: #a1a1a6; font-size: 12px; }
+
+.config-cartao { padding: 4px 12px 14px; display: flex; flex-direction: column; gap: 12px; }
+.config-cartao-dias { display: flex; flex-direction: column; gap: 10px; }
+.config-cartao-dias .field { flex-direction: row; align-items: center; justify-content: space-between; }
+.config-cartao-dias .field label { margin: 0; }
+.config-cartao-dias .field input { width: 64px; text-align: center; }
+
 /* ---------- Dados (backup / reset) ---------- */
 .dados-backup-box {
   background: var(--surface);

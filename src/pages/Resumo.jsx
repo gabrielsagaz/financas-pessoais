@@ -18,6 +18,7 @@ export default function Resumo() {
   const categorias = useLiveQuery(() => db.categorias.toArray(), []) || [];
   const orcamentos = useLiveQuery(() => db.orcamentos.toArray(), []) || [];
   const recorrencias = useLiveQuery(() => db.recorrencias.toArray(), []) || [];
+  const excecoesValor = useLiveQuery(() => db.excecoesValor.toArray(), []) || [];
   const categoriaPorId = useMemo(() => Object.fromEntries(categorias.map((c) => [c.id, c])), [categorias]);
 
   const anosDisponiveis = useMemo(() => {
@@ -31,8 +32,8 @@ export default function Resumo() {
   // números pra dar visão do que ainda vem no período escolhido. Cada item
   // sai marcado com `previsto: true`.
   const previsoes = useMemo(
-    () => projetarTodasAsRecorrencias(recorrencias, entradas, ano, mes === 0 ? 12 : mes),
-    [recorrencias, entradas, ano, mes]
+    () => projetarTodasAsRecorrencias(recorrencias, entradas, excecoesValor, ano, mes === 0 ? 12 : mes),
+    [recorrencias, entradas, excecoesValor, ano, mes]
   );
 
   const entradasDoAno = useMemo(

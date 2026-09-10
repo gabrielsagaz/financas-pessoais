@@ -13,6 +13,28 @@ import { anoMesDe, montarDataISO, anoMesAtualChave } from '../utils/format';
 // depois da última parcela e a recorrência fica marcada como concluída
 // (`ativa: false`).
 
+async function buscarExcecao(recorrenciaId, anoMes) {
+  return db.excecoesValor.where('recorrenciaId').equals(recorrenciaId).and((e) => e.anoMes === anoMes).first();
+}
+
+// Ajusta o valor de UMA ocorrência futura específica (ex: a conta de luz
+// de outubro veio mais cara) sem alterar o valor padrão da recorrência —
+// os outros meses continuam usando `recorrencia.valor` normalmente. Some
+// sozinha quando aquele mês é gerado de verdade (ver `gerarLancamentoDoMes`).
+export async function definirValorExcecao(recorrenciaId, anoMes, valor) {
+  const existente = await buscarExcecao(recorrenciaId, anoMes);
+  if (existente) {
+    await db.excecoesValor.update(existente.id, { valor });
+  } else {
+    await db.excecoesValor.add({ recorrenciaId, anoMes, valor });
+  }
+}
+
+export async function removerValorExcecao(recorrenciaId, anoMes) {
+  const existente = await buscarExcecao(recorrenciaId, anoMes);
+  if (existente) await db.excecoesValor.delete(existente.id);
+}
+
 export async function criarRecorrencia({ tipo, valor, categoriaId, subcategoriaId, contaId, nota, dataInicio, totalParcelas }) {
   const { ano, mes } = anoMesDe(dataInicio);
   const diaDoMes = Number(dataInicio.split('-')[2]);
@@ -60,10 +82,13 @@ async function gerarLancamentoDoMes(recorrencia, ano, mes) {
   const jaGeradas = await db.entries.where('recorrenciaId').equals(recorrencia.id).count();
   const numeroParcela = jaGeradas + 1;
   const ehParcelada = !!recorrencia.totalParcelas;
+  const anoMes = `${ano}-${String(mes).padStart(2, '0')}`;
+  const excecao = await buscarExcecao(recorrencia.id, anoMes);
+  const valorFinal = excecao ? excecao.valor : recorrencia.valor;
 
   await db.entries.add({
     tipo: recorrencia.tipo,
-    valor: recorrencia.valor,
+    valor: valorFinal,
     data: montarDataISO(ano, mes, recorrencia.diaDoMes),
     categoriaId: recorrencia.categoriaId,
     subcategoriaId: recorrencia.subcategoriaId ?? null,
@@ -75,6 +100,10 @@ async function gerarLancamentoDoMes(recorrencia, ano, mes) {
     numeroParcela: ehParcelada ? numeroParcela : null,
     criadoEm: new Date().toISOString()
   });
+
+  // O ajuste era só pra essa ocorrência — uma vez virada lançamento real
+  // (com o valor certo já gravado), a exceção não faz mais sentido existir.
+  if (excecao) await db.excecoesValor.delete(excecao.id);
 
   if (ehParcelada && numeroParcela >= recorrencia.totalParcelas) {
     await db.recorrencias.update(recorrencia.id, { ativa: false });
@@ -130,7 +159,7 @@ export async function gerarLancamentosPendentes() {
 // recorrência já gerou (pra continuar a contagem de parcela corretamente
 // e parar de projetar depois da última). Cada ocorrência projetada vem
 // marcada com `previsto: true` e sem `id` (nunca existiu no banco).
-export function projetarOcorrencias(recorrencia, jaGeradas, anoAlvo, mesAlvo) {
+export function projetarOcorrencias(recorrencia, jaGeradas, excecoesPorAnoMes, anoAlvo, mesAlvo) {
   const ocorrencias = [];
   let { ano, mes } = recorrencia.ultimaGeracao
     ? anoMesDe(`${recorrencia.ultimaGeracao}-01`)
@@ -147,9 +176,12 @@ export function projetarOcorrencias(recorrencia, jaGeradas, anoAlvo, mesAlvo) {
     numeroParcela++;
     if (ehParcelada && numeroParcela > recorrencia.totalParcelas) break;
 
+    const anoMes = `${ano}-${String(mes).padStart(2, '0')}`;
+    const temExcecao = !!excecoesPorAnoMes && anoMes in excecoesPorAnoMes;
+
     ocorrencias.push({
       tipo: recorrencia.tipo,
-      valor: recorrencia.valor,
+      valor: temExcecao ? excecoesPorAnoMes[anoMes] : recorrencia.valor,
       data: montarDataISO(ano, mes, recorrencia.diaDoMes),
       categoriaId: recorrencia.categoriaId,
       subcategoriaId: recorrencia.subcategoriaId ?? null,
@@ -157,7 +189,9 @@ export function projetarOcorrencias(recorrencia, jaGeradas, anoAlvo, mesAlvo) {
       nota: recorrencia.nota || '',
       recorrenciaId: recorrencia.id,
       numeroParcela: ehParcelada ? numeroParcela : null,
-      previsto: true
+      previsto: true,
+      anoMes,
+      valorAjustado: temExcecao
     });
 
     if (ehParcelada && numeroParcela >= recorrencia.totalParcelas) break;
@@ -169,9 +203,10 @@ export function projetarOcorrencias(recorrencia, jaGeradas, anoAlvo, mesAlvo) {
 }
 
 // Projeta as ocorrências futuras de TODAS as recorrências ativas até um
-// ano/mês-alvo. `entradasReais` é a lista já carregada de `entries` (evita
-// uma nova consulta ao banco — quem chama já tem isso via useLiveQuery).
-export function projetarTodasAsRecorrencias(recorrencias, entradasReais, anoAlvo, mesAlvo) {
+// ano/mês-alvo. `entradasReais` é a lista já carregada de `entries` e
+// `excecoes` a lista já carregada de `excecoesValor` (evita novas consultas
+// ao banco — quem chama já tem isso via useLiveQuery).
+export function projetarTodasAsRecorrencias(recorrencias, entradasReais, excecoes, anoAlvo, mesAlvo) {
   const hoje = new Date();
   const anoAtual = hoje.getFullYear();
   const mesAtual = hoje.getMonth() + 1;
@@ -182,11 +217,17 @@ export function projetarTodasAsRecorrencias(recorrencias, entradasReais, anoAlvo
     return [];
   }
 
+  const excecoesPorRecorrencia = {};
+  for (const exc of excecoes) {
+    if (!excecoesPorRecorrencia[exc.recorrenciaId]) excecoesPorRecorrencia[exc.recorrenciaId] = {};
+    excecoesPorRecorrencia[exc.recorrenciaId][exc.anoMes] = exc.valor;
+  }
+
   const ativas = recorrencias.filter((r) => r.ativa);
   const previsoes = [];
   for (const recorrencia of ativas) {
     const jaGeradas = entradasReais.filter((e) => e.recorrenciaId === recorrencia.id).length;
-    previsoes.push(...projetarOcorrencias(recorrencia, jaGeradas, anoAlvo, mesAlvo));
+    previsoes.push(...projetarOcorrencias(recorrencia, jaGeradas, excecoesPorRecorrencia[recorrencia.id], anoAlvo, mesAlvo));
   }
   return previsoes;
 }

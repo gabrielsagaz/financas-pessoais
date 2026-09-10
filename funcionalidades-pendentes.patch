@@ -1,0 +1,781 @@
+diff --git a/ROADMAP.md b/ROADMAP.md
+index ed0c8d2..df50152 100644
+--- a/ROADMAP.md
++++ b/ROADMAP.md
+@@ -41,6 +41,25 @@ Mantido aqui pra não se perder entre conversas.
+ 
+ ## Concluído (set/2026)
+ 
++- [x] **Ajustar valor de um lançamento fixo só naquele mês** — nos
++  previstos do Histórico, clicar abre uma edição simples só do valor
++  (categoria/conta/data continuam vindo da recorrência). O ajuste vale só
++  pra aquele mês — os outros continuam com o valor padrão. Por baixo,
++  vira uma "exceção" (`excecoesValor`, nova tabela) que é consumida
++  automaticamente quando o mês chega e o lançamento real é gerado.
++- [x] **Tornar recorrente ao editar** — no Histórico, ao editar um
++  lançamento avulso, dá pra ativar "Tornar recorrente" (todo mês ou
++  parcelado). Por baixo do capô, o lançamento solto é substituído pela
++  primeira ocorrência de uma recorrência nova, já linkada.
++- [x] **Duplicar lançamento** — no Histórico, cada lançamento tem um botão
++  de duplicar: cria uma cópia independente (sem herdar recorrência/parcela)
++  e já abre em edição pra ajustar data/valor na hora.
++- [x] **Cartão de crédito (dia de fechamento/vencimento)** — em Categorias →
++  Contas, qualquer conta pode ser marcada como cartão, com dia de
++  fechamento e de vencimento. O Histórico mostra em qual fatura cada gasto
++  cai e quando ela vence (`src/utils/cartao.js`). Só organiza a
++  visualização — não controla saldo da fatura nem soma total por cartão
++  ainda (ideia pra uma futura tela de "Faturas", ver abaixo).
+ - [x] **Backup/exportação dos dados** — em Categorias → Dados: exportar
+   baixa um `.json` com categorias, subcategorias, contas, lançamentos,
+   recorrências e orçamentos (fica de fora `configuracoes`, que guarda o hash
+@@ -73,6 +92,10 @@ Mantido aqui pra não se perder entre conversas.
+ 
+ ## Prioridade baixa (mais pra frente)
+ 
++- [ ] **Tela de "Faturas"** — hoje o cartão só mostra a fatura em cada linha
++  do Histórico. Uma tela dedicada agrupando por fatura (total da fatura,
++  data de vencimento, marcá-la como paga) ficaria mais completa — natural
++  de fazer junto com "Saldo controlado por conta" da Fase 2.
+ - [ ] **Publicar na Google Play** — não precisa reescrever em React Native:
+   dá pra empacotar o PWA atual como Trusted Web Activity ou via Capacitor.
+ - [ ] **Modo escuro** — alternador de tema, aproveitando os tokens de cor já
+diff --git a/src/components/Icons.jsx b/src/components/Icons.jsx
+index 91c42df..033e357 100644
+--- a/src/components/Icons.jsx
++++ b/src/components/Icons.jsx
+@@ -93,3 +93,22 @@ export function IconRepeat({ size = 18 }) {
+     </svg>
+   );
+ }
++
++export function IconCopy({ size = 18 }) {
++  return (
++    <svg width={size} height={size} {...base} strokeWidth={1.6}>
++      <rect x="8.5" y="8.5" width="11" height="11" rx="2" />
++      <path d="M15.5 8.5V6.5A2 2 0 0 0 13.5 4.5h-8a2 2 0 0 0-2 2v8a2 2 0 0 0 2 2h2" />
++    </svg>
++  );
++}
++
++export function IconCard({ size = 18 }) {
++  return (
++    <svg width={size} height={size} {...base} strokeWidth={1.6}>
++      <rect x="3" y="6" width="18" height="13" rx="2.2" />
++      <path d="M3 10.5h18" />
++      <path d="M6.5 15h4" />
++    </svg>
++  );
++}
+diff --git a/src/db/backup.js b/src/db/backup.js
+index 79d187d..d1aa5dd 100644
+--- a/src/db/backup.js
++++ b/src/db/backup.js
+@@ -4,7 +4,7 @@ import { anoMesAtualChave } from '../utils/format';
+ // Tabelas com dados financeiros (fica de fora `configuracoes`, que guarda o
+ // hash do PIN — é uma config do dispositivo, não um dado que faça sentido
+ // migrar entre aparelhos junto com o backup).
+-const TABELAS_BACKUP = ['categorias', 'subcategorias', 'contas', 'entries', 'recorrencias', 'orcamentos'];
++const TABELAS_BACKUP = ['categorias', 'subcategorias', 'contas', 'entries', 'recorrencias', 'orcamentos', 'excecoesValor'];
+ 
+ // Monta o objeto de backup com todas as tabelas financeiras. Formato próprio
+ // e versionado (campo `versao`) — se o esquema do banco mudar no futuro, dá
+diff --git a/src/db/db.js b/src/db/db.js
+index e819b0e..8324bc9 100644
+--- a/src/db/db.js
++++ b/src/db/db.js
+@@ -59,6 +59,21 @@ db.version(2).stores({
+   configuracoes: '++id, &chave'
+ });
+ 
++// v3 — permite ajustar o valor de UMA ocorrência futura específica (ex:
++// conta de luz que varia todo mês) sem mudar o valor padrão da recorrência
++// nem afetar os outros meses. Cada linha é "recorrência X + mês Y = valor
++// Z"; consumida (removida) quando aquele mês vira um lançamento real.
++db.version(3).stores({
++  categorias: '++id, tipo, ordem',
++  subcategorias: '++id, categoriaId, ordem',
++  contas: '++id, ordem',
++  entries: '++id, tipo, data, categoriaId, subcategoriaId, contaId, recorrenciaId, [tipo+data]',
++  recorrencias: '++id, tipo',
++  orcamentos: '++id, &categoriaId',
++  configuracoes: '++id, &chave',
++  excecoesValor: '++id, recorrenciaId'
++});
++
+ // -------------------------- Seed inicial (1x) -------------------------------
+ 
+ async function jaTemDados() {
+diff --git a/src/db/recorrencias.js b/src/db/recorrencias.js
+index be14582..5b9c37c 100644
+--- a/src/db/recorrencias.js
++++ b/src/db/recorrencias.js
+@@ -13,6 +13,28 @@ import { anoMesDe, montarDataISO, anoMesAtualChave } from '../utils/format';
+ // depois da última parcela e a recorrência fica marcada como concluída
+ // (`ativa: false`).
+ 
++async function buscarExcecao(recorrenciaId, anoMes) {
++  return db.excecoesValor.where('recorrenciaId').equals(recorrenciaId).and((e) => e.anoMes === anoMes).first();
++}
++
++// Ajusta o valor de UMA ocorrência futura específica (ex: a conta de luz
++// de outubro veio mais cara) sem alterar o valor padrão da recorrência —
++// os outros meses continuam usando `recorrencia.valor` normalmente. Some
++// sozinha quando aquele mês é gerado de verdade (ver `gerarLancamentoDoMes`).
++export async function definirValorExcecao(recorrenciaId, anoMes, valor) {
++  const existente = await buscarExcecao(recorrenciaId, anoMes);
++  if (existente) {
++    await db.excecoesValor.update(existente.id, { valor });
++  } else {
++    await db.excecoesValor.add({ recorrenciaId, anoMes, valor });
++  }
++}
++
++export async function removerValorExcecao(recorrenciaId, anoMes) {
++  const existente = await buscarExcecao(recorrenciaId, anoMes);
++  if (existente) await db.excecoesValor.delete(existente.id);
++}
++
+ export async function criarRecorrencia({ tipo, valor, categoriaId, subcategoriaId, contaId, nota, dataInicio, totalParcelas }) {
+   const { ano, mes } = anoMesDe(dataInicio);
+   const diaDoMes = Number(dataInicio.split('-')[2]);
+@@ -60,10 +82,13 @@ async function gerarLancamentoDoMes(recorrencia, ano, mes) {
+   const jaGeradas = await db.entries.where('recorrenciaId').equals(recorrencia.id).count();
+   const numeroParcela = jaGeradas + 1;
+   const ehParcelada = !!recorrencia.totalParcelas;
++  const anoMes = `${ano}-${String(mes).padStart(2, '0')}`;
++  const excecao = await buscarExcecao(recorrencia.id, anoMes);
++  const valorFinal = excecao ? excecao.valor : recorrencia.valor;
+ 
+   await db.entries.add({
+     tipo: recorrencia.tipo,
+-    valor: recorrencia.valor,
++    valor: valorFinal,
+     data: montarDataISO(ano, mes, recorrencia.diaDoMes),
+     categoriaId: recorrencia.categoriaId,
+     subcategoriaId: recorrencia.subcategoriaId ?? null,
+@@ -76,6 +101,10 @@ async function gerarLancamentoDoMes(recorrencia, ano, mes) {
+     criadoEm: new Date().toISOString()
+   });
+ 
++  // O ajuste era só pra essa ocorrência — uma vez virada lançamento real
++  // (com o valor certo já gravado), a exceção não faz mais sentido existir.
++  if (excecao) await db.excecoesValor.delete(excecao.id);
++
+   if (ehParcelada && numeroParcela >= recorrencia.totalParcelas) {
+     await db.recorrencias.update(recorrencia.id, { ativa: false });
+     return true;
+@@ -130,7 +159,7 @@ export async function gerarLancamentosPendentes() {
+ // recorrência já gerou (pra continuar a contagem de parcela corretamente
+ // e parar de projetar depois da última). Cada ocorrência projetada vem
+ // marcada com `previsto: true` e sem `id` (nunca existiu no banco).
+-export function projetarOcorrencias(recorrencia, jaGeradas, anoAlvo, mesAlvo) {
++export function projetarOcorrencias(recorrencia, jaGeradas, excecoesPorAnoMes, anoAlvo, mesAlvo) {
+   const ocorrencias = [];
+   let { ano, mes } = recorrencia.ultimaGeracao
+     ? anoMesDe(`${recorrencia.ultimaGeracao}-01`)
+@@ -147,9 +176,12 @@ export function projetarOcorrencias(recorrencia, jaGeradas, anoAlvo, mesAlvo) {
+     numeroParcela++;
+     if (ehParcelada && numeroParcela > recorrencia.totalParcelas) break;
+ 
++    const anoMes = `${ano}-${String(mes).padStart(2, '0')}`;
++    const temExcecao = !!excecoesPorAnoMes && anoMes in excecoesPorAnoMes;
++
+     ocorrencias.push({
+       tipo: recorrencia.tipo,
+-      valor: recorrencia.valor,
++      valor: temExcecao ? excecoesPorAnoMes[anoMes] : recorrencia.valor,
+       data: montarDataISO(ano, mes, recorrencia.diaDoMes),
+       categoriaId: recorrencia.categoriaId,
+       subcategoriaId: recorrencia.subcategoriaId ?? null,
+@@ -157,7 +189,9 @@ export function projetarOcorrencias(recorrencia, jaGeradas, anoAlvo, mesAlvo) {
+       nota: recorrencia.nota || '',
+       recorrenciaId: recorrencia.id,
+       numeroParcela: ehParcelada ? numeroParcela : null,
+-      previsto: true
++      previsto: true,
++      anoMes,
++      valorAjustado: temExcecao
+     });
+ 
+     if (ehParcelada && numeroParcela >= recorrencia.totalParcelas) break;
+@@ -169,9 +203,10 @@ export function projetarOcorrencias(recorrencia, jaGeradas, anoAlvo, mesAlvo) {
+ }
+ 
+ // Projeta as ocorrências futuras de TODAS as recorrências ativas até um
+-// ano/mês-alvo. `entradasReais` é a lista já carregada de `entries` (evita
+-// uma nova consulta ao banco — quem chama já tem isso via useLiveQuery).
+-export function projetarTodasAsRecorrencias(recorrencias, entradasReais, anoAlvo, mesAlvo) {
++// ano/mês-alvo. `entradasReais` é a lista já carregada de `entries` e
++// `excecoes` a lista já carregada de `excecoesValor` (evita novas consultas
++// ao banco — quem chama já tem isso via useLiveQuery).
++export function projetarTodasAsRecorrencias(recorrencias, entradasReais, excecoes, anoAlvo, mesAlvo) {
+   const hoje = new Date();
+   const anoAtual = hoje.getFullYear();
+   const mesAtual = hoje.getMonth() + 1;
+@@ -182,11 +217,17 @@ export function projetarTodasAsRecorrencias(recorrencias, entradasReais, anoAlvo
+     return [];
+   }
+ 
++  const excecoesPorRecorrencia = {};
++  for (const exc of excecoes) {
++    if (!excecoesPorRecorrencia[exc.recorrenciaId]) excecoesPorRecorrencia[exc.recorrenciaId] = {};
++    excecoesPorRecorrencia[exc.recorrenciaId][exc.anoMes] = exc.valor;
++  }
++
+   const ativas = recorrencias.filter((r) => r.ativa);
+   const previsoes = [];
+   for (const recorrencia of ativas) {
+     const jaGeradas = entradasReais.filter((e) => e.recorrenciaId === recorrencia.id).length;
+-    previsoes.push(...projetarOcorrencias(recorrencia, jaGeradas, anoAlvo, mesAlvo));
++    previsoes.push(...projetarOcorrencias(recorrencia, jaGeradas, excecoesPorRecorrencia[recorrencia.id], anoAlvo, mesAlvo));
+   }
+   return previsoes;
+ }
+diff --git a/src/index.css b/src/index.css
+index 2fd96fc..0d666f8 100644
+--- a/src/index.css
++++ b/src/index.css
+@@ -648,6 +648,16 @@ input:focus, select:focus {
+ .pin-setup { display: flex; flex-direction: column; align-items: center; gap: 16px; }
+ .pin-setup .btn-cancel { margin-top: 4px; }
+ 
++.tag-ajustado { border-color: var(--blue); color: var(--blue); }
++
++.entry-fatura { color: #a1a1a6; font-size: 12px; }
++
++.config-cartao { padding: 4px 12px 14px; display: flex; flex-direction: column; gap: 12px; }
++.config-cartao-dias { display: flex; flex-direction: column; gap: 10px; }
++.config-cartao-dias .field { flex-direction: row; align-items: center; justify-content: space-between; }
++.config-cartao-dias .field label { margin: 0; }
++.config-cartao-dias .field input { width: 64px; text-align: center; }
++
+ /* ---------- Dados (backup / reset) ---------- */
+ .dados-backup-box {
+   background: var(--surface);
+diff --git a/src/pages/Categorias.jsx b/src/pages/Categorias.jsx
+index e61ee6a..f690bad 100644
+--- a/src/pages/Categorias.jsx
++++ b/src/pages/Categorias.jsx
+@@ -3,11 +3,12 @@ import { useLiveQuery } from 'dexie-react-hooks';
+ import { db } from '../db/db';
+ import { TIPOS } from '../db/defaultData';
+ import ConfirmDialog from '../components/ConfirmDialog';
+-import { IconTrash, IconChevron } from '../components/Icons';
++import { IconTrash, IconChevron, IconCard } from '../components/Icons';
+ import MoneyInput from '../components/MoneyInput';
+ import PinPad from '../components/PinPad';
+ import { definirPin, removerPin, pinEstaAtivo } from '../db/security';
+ import { exportarBackup, baixarBackupComoArquivo, importarBackup, apagarTodosOsLancamentos } from '../db/backup';
++import { contaEhCartao } from '../utils/cartao';
+ 
+ export default function Categorias() {
+   const [tipoAtivo, setTipoAtivo] = useState('despesa');
+@@ -361,11 +362,12 @@ function ListaContas() {
+   const [novoNome, setNovoNome] = useState('');
+   const [erro, setErro] = useState('');
+   const [excluindoId, setExcluindoId] = useState(null);
++  const [expandidaId, setExpandidaId] = useState(null);
+ 
+   async function adicionar() {
+     const nome = novoNome.trim();
+     if (!nome) return;
+-    await db.contas.add({ nome, ordem: contas.length, arquivada: false });
++    await db.contas.add({ nome, ordem: contas.length, arquivada: false, tipo: 'conta' });
+     setNovoNome('');
+   }
+ 
+@@ -390,9 +392,25 @@ function ListaContas() {
+     <div className="lista-contas">
+       {erro && <p className="mensagem erro">{erro}</p>}
+       {contas.map((conta) => (
+-        <div key={conta.id} className="subcategoria-item">
+-          <input value={conta.nome} onChange={(e) => renomear(conta, e.target.value)} />
+-          <button type="button" className="btn-excluir-mini" onClick={() => setExcluindoId(conta.id)}><IconTrash /></button>
++        <div key={conta.id} className="categoria-card">
++          <div className="categoria-header" onClick={() => setExpandidaId(expandidaId === conta.id ? null : conta.id)}>
++            {contaEhCartao(conta) && <IconCard size={16} />}
++            <input
++              className="categoria-nome-input"
++              value={conta.nome}
++              onClick={(e) => e.stopPropagation()}
++              onChange={(e) => renomear(conta, e.target.value)}
++            />
++            <button
++              type="button"
++              className="btn-excluir-mini"
++              onClick={(e) => { e.stopPropagation(); setExcluindoId(conta.id); }}
++            >
++              <IconTrash />
++            </button>
++            <span className="expand-icon"><IconChevron open={expandidaId === conta.id} /></span>
++          </div>
++          {expandidaId === conta.id && <ConfigCartao conta={conta} />}
+         </div>
+       ))}
+       <div className="inline-add">
+@@ -416,3 +434,52 @@ function ListaContas() {
+     </div>
+   );
+ }
++
++// Configuração de "cartão de crédito" pra uma conta: dia de fechamento
++// (quando a fatura atual para de acumular) e dia de vencimento (quando essa
++// fatura precisa ser paga). Guardado direto na própria conta — não precisa
++// de tabela nova, só de mais alguns campos.
++function ConfigCartao({ conta }) {
++  const ehCartao = contaEhCartao(conta);
++  const [diaFechamento, setDiaFechamento] = useState(conta.diaFechamento || 1);
++  const [diaVencimento, setDiaVencimento] = useState(conta.diaVencimento || 10);
++
++  async function alternarCartao() {
++    if (ehCartao) {
++      await db.contas.update(conta.id, { tipo: 'conta' });
++    } else {
++      await db.contas.update(conta.id, { tipo: 'cartao', diaFechamento, diaVencimento });
++    }
++  }
++
++  async function salvarDias(campo, valor) {
++    const dia = Math.min(31, Math.max(1, Number(valor) || 1));
++    if (campo === 'fechamento') setDiaFechamento(dia); else setDiaVencimento(dia);
++    await db.contas.update(conta.id, { [campo === 'fechamento' ? 'diaFechamento' : 'diaVencimento']: dia });
++  }
++
++  return (
++    <div className="config-cartao">
++      <label className="switch-row">
++        <span className="switch-label"><IconCard size={17} /> É cartão de crédito</span>
++        <span className={`switch ${ehCartao ? 'ativo' : ''}`} onClick={alternarCartao} />
++      </label>
++
++      {ehCartao && (
++        <div className="config-cartao-dias">
++          <div className="field">
++            <label>Dia de fechamento da fatura</label>
++            <input type="number" min="1" max="31" value={diaFechamento} onChange={(e) => salvarDias('fechamento', e.target.value)} />
++          </div>
++          <div className="field">
++            <label>Dia de vencimento</label>
++            <input type="number" min="1" max="31" value={diaVencimento} onChange={(e) => salvarDias('vencimento', e.target.value)} />
++          </div>
++          <p className="repeticao-explicacao">
++            Compras depois do dia de fechamento entram na fatura seguinte. Isso só organiza a visualização no Histórico — não controla saldo nem gera cobrança automática.
++          </p>
++        </div>
++      )}
++    </div>
++  );
++}
+diff --git a/src/pages/Historico.jsx b/src/pages/Historico.jsx
+index a248506..fb160e4 100644
+--- a/src/pages/Historico.jsx
++++ b/src/pages/Historico.jsx
+@@ -3,30 +3,34 @@ import { useLiveQuery } from 'dexie-react-hooks';
+ import { db } from '../db/db';
+ import { TIPOS } from '../db/defaultData';
+ import { formatCurrency, formatDateBR, NOMES_MESES, anoMesDe } from '../utils/format';
+-import { projetarTodasAsRecorrencias } from '../db/recorrencias';
++import { projetarTodasAsRecorrencias, criarRecorrencia, definirValorExcecao, removerValorExcecao } from '../db/recorrencias';
++import { calcularFaturaDoLancamento, contaEhCartao } from '../utils/cartao';
+ import EditableSelect from '../components/EditableSelect';
+ import MoneyInput from '../components/MoneyInput';
+ import ConfirmDialog from '../components/ConfirmDialog';
+-import { IconTrash, IconRepeat } from '../components/Icons';
++import { IconTrash, IconRepeat, IconCopy } from '../components/Icons';
+ 
+ export default function Historico() {
+   const [filtroTipo, setFiltroTipo] = useState('todos');
+   const [filtroAno, setFiltroAno] = useState(new Date().getFullYear());
+   const [filtroMes, setFiltroMes] = useState(0); // 0 = todos
+   const [editandoId, setEditandoId] = useState(null);
++  const [editandoPrevistoChave, setEditandoPrevistoChave] = useState(null);
+   const [excluindoId, setExcluindoId] = useState(null);
++  const [mensagem, setMensagem] = useState('');
+ 
+   const entradasReais = useLiveQuery(() => db.entries.orderBy('data').reverse().toArray(), []) || [];
+   const categorias = useLiveQuery(() => db.categorias.toArray(), []) || [];
+   const subcategorias = useLiveQuery(() => db.subcategorias.toArray(), []) || [];
+   const contas = useLiveQuery(() => db.contas.orderBy('ordem').toArray(), []) || [];
+   const recorrencias = useLiveQuery(() => db.recorrencias.toArray(), []) || [];
++  const excecoesValor = useLiveQuery(() => db.excecoesValor.toArray(), []) || [];
+ 
+   // Previsão dos lançamentos fixos futuros pro ano/mês filtrado — mesma
+   // lógica do Resumo (não grava nada no banco, só dá visibilidade).
+   const previsoes = useMemo(
+-    () => projetarTodasAsRecorrencias(recorrencias, entradasReais, filtroAno, filtroMes === 0 ? 12 : filtroMes),
+-    [recorrencias, entradasReais, filtroAno, filtroMes]
++    () => projetarTodasAsRecorrencias(recorrencias, entradasReais, excecoesValor, filtroAno, filtroMes === 0 ? 12 : filtroMes),
++    [recorrencias, entradasReais, excecoesValor, filtroAno, filtroMes]
+   );
+ 
+   const entradas = useMemo(
+@@ -60,6 +64,35 @@ export default function Historico() {
+     setExcluindoId(null);
+   }
+ 
++  // Cria uma cópia independente do lançamento (não herda recorrenciaId nem
++  // número de parcela — é um lançamento manual novo) e abre em edição na
++  // hora, pra ajustar data/valor rapidamente se for o caso.
++  async function duplicar(entry) {
++    const novoId = await db.entries.add({
++      tipo: entry.tipo,
++      valor: entry.valor,
++      data: entry.data,
++      categoriaId: entry.categoriaId,
++      subcategoriaId: entry.subcategoriaId ?? null,
++      contaId: entry.contaId ?? null,
++      nota: entry.nota || '',
++      origem: 'manual',
++      externalId: null,
++      recorrenciaId: null,
++      numeroParcela: null,
++      criadoEm: new Date().toISOString()
++    });
++    setMensagem('Lançamento duplicado ✓ — ajuste o que precisar.');
++    setEditandoId(novoId);
++  }
++
++  function descreverFatura(entry) {
++    const conta = contaPorId[entry.contaId];
++    if (!conta || !contaEhCartao(conta)) return null;
++    const { mesFatura, dataVencimento } = calcularFaturaDoLancamento(entry.data, conta.diaFechamento, conta.diaVencimento);
++    return `Fatura de ${NOMES_MESES[mesFatura - 1]} · vence ${formatDateBR(dataVencimento)}`;
++  }
++
+   return (
+     <div className="page">
+       <h1>Histórico</h1>
+@@ -82,11 +115,14 @@ export default function Historico() {
+         </select>
+       </div>
+ 
++      {mensagem && <p className="mensagem">{mensagem}</p>}
++
+       {listaFiltrada.length === 0 && <p className="vazio">Nenhum lançamento neste filtro.</p>}
+ 
+       <ul className="lista-entries">
+         {listaFiltrada.map((entry) => {
+           const chave = entry.previsto ? `previsto-${entry.recorrenciaId}-${entry.data}` : entry.id;
++          const fatura = !entry.previsto ? descreverFatura(entry) : null;
+           return (
+           <li key={chave} className={`entry-item${entry.previsto ? ' previsto' : ''}`}>
+             {editandoId === entry.id && !entry.previsto ? (
+@@ -95,12 +131,17 @@ export default function Historico() {
+                 onCancelar={() => setEditandoId(null)}
+                 onSalvo={() => setEditandoId(null)}
+               />
++            ) : entry.previsto && editandoPrevistoChave === chave ? (
++              <EditarValorPrevisto
++                entry={entry}
++                onCancelar={() => setEditandoPrevistoChave(null)}
++                onSalvo={() => setEditandoPrevistoChave(null)}
++              />
+             ) : (
+               <div className="entry-linha">
+                 <div
+                   className="entry-clickable"
+-                  style={entry.previsto ? { cursor: 'default' } : undefined}
+-                  onClick={() => !entry.previsto && setEditandoId(entry.id)}
++                  onClick={() => (entry.previsto ? setEditandoPrevistoChave(chave) : setEditandoId(entry.id))}
+                 >
+                   <span className="entry-dot" style={{ background: TIPOS[entry.tipo].cor }} />
+                   <div className="entry-info">
+@@ -110,6 +151,7 @@ export default function Historico() {
+                         ` › ${subcategoriaPorId[entry.subcategoriaId].nome}`}
+                       {entry.recorrenciaId && <IconRepeat size={13} />}
+                       {entry.previsto && <span className="tag-previsto">Previsto</span>}
++                      {entry.valorAjustado && <span className="tag-previsto tag-ajustado">Valor ajustado</span>}
+                     </div>
+                     <div className="entry-detalhe">
+                       {formatDateBR(entry.data)}
+@@ -118,15 +160,21 @@ export default function Historico() {
+                       {entry.numeroParcela && recorrenciaPorId[entry.recorrenciaId]?.totalParcelas &&
+                         ` · Parcela ${entry.numeroParcela}/${recorrenciaPorId[entry.recorrenciaId].totalParcelas}`}
+                     </div>
++                    {fatura && <div className="entry-detalhe entry-fatura">{fatura}</div>}
+                   </div>
+                   <div className="entry-valor" style={{ color: TIPOS[entry.tipo].cor }}>
+                     {formatCurrency(entry.valor)}
+                   </div>
+                 </div>
+                 {!entry.previsto && (
+-                  <button type="button" className="btn-excluir-mini" onClick={() => setExcluindoId(entry.id)}>
+-                    <IconTrash />
+-                  </button>
++                  <>
++                    <button type="button" className="btn-excluir-mini" title="Duplicar" onClick={() => duplicar(entry)}>
++                      <IconCopy />
++                    </button>
++                    <button type="button" className="btn-excluir-mini" title="Excluir" onClick={() => setExcluindoId(entry.id)}>
++                      <IconTrash />
++                    </button>
++                  </>
+                 )}
+               </div>
+             )}
+@@ -153,6 +201,12 @@ function EditarEntry({ entry, onCancelar, onSalvo }) {
+   const [subcategoriaId, setSubcategoriaId] = useState(entry.subcategoriaId);
+   const [contaId, setContaId] = useState(entry.contaId);
+   const [nota, setNota] = useState(entry.nota || '');
++  const [repetir, setRepetir] = useState(false);
++  const [modoRepeticao, setModoRepeticao] = useState('infinito'); // 'infinito' | 'parcelas'
++  const [totalParcelas, setTotalParcelas] = useState('3');
++  const [salvando, setSalvando] = useState(false);
++
++  const jaEhRecorrente = !!entry.recorrenciaId;
+ 
+   const categorias = useLiveQuery(
+     () => db.categorias.where('tipo').equals(entry.tipo).sortBy('ordem'),
+@@ -171,19 +225,42 @@ function EditarEntry({ entry, onCancelar, onSalvo }) {
+     return db.subcategorias.add({ categoriaId, nome, ordem: subcategorias.length });
+   }
+   async function criarConta(nome) {
+-    return db.contas.add({ nome, ordem: contas.length, arquivada: false });
++    return db.contas.add({ nome, ordem: contas.length, arquivada: false, tipo: 'conta' });
+   }
+ 
+   async function salvar() {
+-    await db.entries.update(entry.id, {
+-      valor,
+-      data,
+-      categoriaId,
+-      subcategoriaId: subcategoriaId ?? null,
+-      contaId: contaId ?? null,
+-      nota: nota.trim()
+-    });
+-    onSalvo();
++    setSalvando(true);
++    try {
++      if (repetir && !jaEhRecorrente) {
++        // Transforma este lançamento avulso num lançamento fixo: remove a
++        // entrada solta e deixa a recorrência gerar a ocorrência do mesmo
++        // mês em seu lugar, já linkada (`recorrenciaId`).
++        const parcelas = modoRepeticao === 'parcelas' ? Number(totalParcelas) : null;
++        await db.entries.delete(entry.id);
++        await criarRecorrencia({
++          tipo: entry.tipo,
++          valor,
++          categoriaId,
++          subcategoriaId: subcategoriaId ?? null,
++          contaId: contaId ?? null,
++          nota: nota.trim(),
++          dataInicio: data,
++          totalParcelas: parcelas
++        });
++      } else {
++        await db.entries.update(entry.id, {
++          valor,
++          data,
++          categoriaId,
++          subcategoriaId: subcategoriaId ?? null,
++          contaId: contaId ?? null,
++          nota: nota.trim()
++        });
++      }
++      onSalvo();
++    } finally {
++      setSalvando(false);
++    }
+   }
+ 
+   return (
+@@ -205,9 +282,110 @@ function EditarEntry({ entry, onCancelar, onSalvo }) {
+         <label>Observação</label>
+         <input type="text" value={nota} onChange={(e) => setNota(e.target.value)} />
+       </div>
++
++      {jaEhRecorrente ? (
++        <p className="repeticao-explicacao"><IconRepeat size={13} /> Esta é uma ocorrência de um lançamento fixo — pausar ou excluir a recorrência é feito em "Lançar".</p>
++      ) : (
++        <>
++          <label className="switch-row">
++            <span className="switch-label"><IconRepeat size={17} /> Tornar recorrente</span>
++            <span className={`switch ${repetir ? 'ativo' : ''}`} onClick={() => setRepetir((v) => !v)} />
++          </label>
++
++          {repetir && (
++            <div className="repeticao-opcoes">
++              <div className="tipo-tabs" style={{ marginBottom: 10 }}>
++                <button
++                  type="button"
++                  className={`tipo-tab ${modoRepeticao === 'infinito' ? 'ativo' : ''}`}
++                  style={modoRepeticao === 'infinito' ? { color: 'var(--blue)' } : undefined}
++                  onClick={() => setModoRepeticao('infinito')}
++                >
++                  Todo mês
++                </button>
++                <button
++                  type="button"
++                  className={`tipo-tab ${modoRepeticao === 'parcelas' ? 'ativo' : ''}`}
++                  style={modoRepeticao === 'parcelas' ? { color: 'var(--blue)' } : undefined}
++                  onClick={() => setModoRepeticao('parcelas')}
++                >
++                  Número de vezes
++                </button>
++              </div>
++
++              {modoRepeticao === 'infinito' ? (
++                <p className="repeticao-explicacao">A partir deste lançamento, vai repetir todo mês, sem parar.</p>
++              ) : (
++                <div className="field">
++                  <label htmlFor="parcelas-edit">Quantas vezes, contando esta (ex: 3 = essa + mais 2)</label>
++                  <input
++                    id="parcelas-edit"
++                    type="number"
++                    min="2"
++                    inputMode="numeric"
++                    value={totalParcelas}
++                    onChange={(e) => setTotalParcelas(e.target.value)}
++                  />
++                </div>
++              )}
++            </div>
++          )}
++        </>
++      )}
++
++      <div className="edit-actions">
++        <button type="button" className="btn-cancel" onClick={onCancelar}>Cancelar</button>
++        <button type="button" className="btn-primary" disabled={salvando} onClick={salvar}>{salvando ? 'Salvando...' : 'Salvar'}</button>
++      </div>
++    </div>
++  );
++}
++
++// Edição bem mais simples que EditarEntry: um "previsto" não existe de
++// verdade no banco ainda, então só faz sentido ajustar o valor DAQUELE mês
++// específico (ex: conta de luz mais cara em janeiro) — categoria, conta e
++// data continuam vindo da recorrência normalmente. O ajuste vira uma
++// exceção (`excecoesValor`) e é consumido automaticamente quando o mês
++// chegar e o lançamento real for gerado.
++function EditarValorPrevisto({ entry, onCancelar, onSalvo }) {
++  const [valor, setValor] = useState(entry.valor);
++  const [salvando, setSalvando] = useState(false);
++
++  async function salvar() {
++    setSalvando(true);
++    try {
++      await definirValorExcecao(entry.recorrenciaId, entry.anoMes, valor);
++      onSalvo();
++    } finally {
++      setSalvando(false);
++    }
++  }
++
++  async function usarValorPadrao() {
++    setSalvando(true);
++    try {
++      await removerValorExcecao(entry.recorrenciaId, entry.anoMes);
++      onSalvo();
++    } finally {
++      setSalvando(false);
++    }
++  }
++
++  return (
++    <div className="edit-box">
++      <p className="repeticao-explicacao">
++        Esse ajuste vale só para {formatDateBR(entry.data)} — os outros meses deste lançamento fixo continuam com o valor padrão.
++      </p>
++      <div className="field">
++        <label>Valor deste mês</label>
++        <MoneyInput value={valor} onChange={setValor} autoFocus />
++      </div>
+       <div className="edit-actions">
+         <button type="button" className="btn-cancel" onClick={onCancelar}>Cancelar</button>
+-        <button type="button" className="btn-primary" onClick={salvar}>Salvar</button>
++        {entry.valorAjustado && (
++          <button type="button" className="btn-cancel" disabled={salvando} onClick={usarValorPadrao}>Usar valor padrão</button>
++        )}
++        <button type="button" className="btn-primary" disabled={salvando} onClick={salvar}>{salvando ? 'Salvando...' : 'Salvar'}</button>
+       </div>
+     </div>
+   );
+diff --git a/src/pages/Lancar.jsx b/src/pages/Lancar.jsx
+index 445f87c..c40f2a4 100644
+--- a/src/pages/Lancar.jsx
++++ b/src/pages/Lancar.jsx
+@@ -69,7 +69,7 @@ export default function Lancar() {
+ 
+   async function criarConta(nome) {
+     const proximaOrdem = contas.length;
+-    return db.contas.add({ nome, ordem: proximaOrdem, arquivada: false });
++    return db.contas.add({ nome, ordem: proximaOrdem, arquivada: false, tipo: 'conta' });
+   }
+ 
+   function limparFormulario() {
+diff --git a/src/pages/Resumo.jsx b/src/pages/Resumo.jsx
+index f3004bf..ed45bc4 100644
+--- a/src/pages/Resumo.jsx
++++ b/src/pages/Resumo.jsx
+@@ -18,6 +18,7 @@ export default function Resumo() {
+   const categorias = useLiveQuery(() => db.categorias.toArray(), []) || [];
+   const orcamentos = useLiveQuery(() => db.orcamentos.toArray(), []) || [];
+   const recorrencias = useLiveQuery(() => db.recorrencias.toArray(), []) || [];
++  const excecoesValor = useLiveQuery(() => db.excecoesValor.toArray(), []) || [];
+   const categoriaPorId = useMemo(() => Object.fromEntries(categorias.map((c) => [c.id, c])), [categorias]);
+ 
+   const anosDisponiveis = useMemo(() => {
+@@ -31,8 +32,8 @@ export default function Resumo() {
+   // números pra dar visão do que ainda vem no período escolhido. Cada item
+   // sai marcado com `previsto: true`.
+   const previsoes = useMemo(
+-    () => projetarTodasAsRecorrencias(recorrencias, entradas, ano, mes === 0 ? 12 : mes),
+-    [recorrencias, entradas, ano, mes]
++    () => projetarTodasAsRecorrencias(recorrencias, entradas, excecoesValor, ano, mes === 0 ? 12 : mes),
++    [recorrencias, entradas, excecoesValor, ano, mes]
+   );
+ 
+   const entradasDoAno = useMemo(
+diff --git a/src/utils/cartao.js b/src/utils/cartao.js
+new file mode 100644
+index 0000000..df7ea71
+--- /dev/null
++++ b/src/utils/cartao.js
+@@ -0,0 +1,46 @@
++import { montarDataISO } from './format';
++
++// Lógica de fatura de cartão de crédito, a partir de dois dados que o
++// usuário cadastra na conta: `diaFechamento` (dia em que a fatura fecha e
++// começa a acumular a próxima) e `diaVencimento` (dia em que a fatura
++// fechada precisa ser paga).
++//
++// Regra: um lançamento feito ATÉ o dia de fechamento entra na fatura que já
++// está acumulando; depois do fechamento, entra na fatura seguinte. O
++// vencimento dessa fatura pode cair no mesmo mês do fechamento ou no mês
++// seguinte, dependendo de `diaVencimento` ser depois ou antes de
++// `diaFechamento` no calendário.
++function proximoMes(ano, mes) {
++  return mes === 12 ? { ano: ano + 1, mes: 1 } : { ano, mes: mes + 1 };
++}
++
++export function calcularFaturaDoLancamento(dataISO, diaFechamento, diaVencimento) {
++  const [anoStr, mesStr, diaStr] = dataISO.split('-');
++  let ano = Number(anoStr);
++  let mes = Number(mesStr);
++  const dia = Number(diaStr);
++
++  // Depois do fechamento deste mês? Entra na fatura que fecha no mês seguinte.
++  if (dia > diaFechamento) {
++    ({ ano, mes } = proximoMes(ano, mes));
++  }
++
++  // O vencimento cai no mês seguinte ao fechamento quando o dia de
++  // vencimento é "menor" no calendário do que o dia de fechamento (ex:
++  // fecha dia 25, vence dia 5 → vencimento é no mês seguinte ao fechamento).
++  let anoVencimento = ano;
++  let mesVencimento = mes;
++  if (diaVencimento <= diaFechamento) {
++    ({ ano: anoVencimento, mes: mesVencimento } = proximoMes(ano, mes));
++  }
++
++  return {
++    anoFatura: ano,
++    mesFatura: mes,
++    dataVencimento: montarDataISO(anoVencimento, mesVencimento, diaVencimento)
++  };
++}
++
++export function contaEhCartao(conta) {
++  return conta?.tipo === 'cartao';
++}

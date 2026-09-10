@@ -3,30 +3,34 @@ import { useLiveQuery } from 'dexie-react-hooks';
 import { db } from '../db/db';
 import { TIPOS } from '../db/defaultData';
 import { formatCurrency, formatDateBR, NOMES_MESES, anoMesDe } from '../utils/format';
-import { projetarTodasAsRecorrencias } from '../db/recorrencias';
+import { projetarTodasAsRecorrencias, criarRecorrencia, definirValorExcecao, removerValorExcecao } from '../db/recorrencias';
+import { calcularFaturaDoLancamento, contaEhCartao } from '../utils/cartao';
 import EditableSelect from '../components/EditableSelect';
 import MoneyInput from '../components/MoneyInput';
 import ConfirmDialog from '../components/ConfirmDialog';
-import { IconTrash, IconRepeat } from '../components/Icons';
+import { IconTrash, IconRepeat, IconCopy } from '../components/Icons';
 
 export default function Historico() {
   const [filtroTipo, setFiltroTipo] = useState('todos');
   const [filtroAno, setFiltroAno] = useState(new Date().getFullYear());
   const [filtroMes, setFiltroMes] = useState(0); // 0 = todos
   const [editandoId, setEditandoId] = useState(null);
+  const [editandoPrevistoChave, setEditandoPrevistoChave] = useState(null);
   const [excluindoId, setExcluindoId] = useState(null);
+  const [mensagem, setMensagem] = useState('');
 
   const entradasReais = useLiveQuery(() => db.entries.orderBy('data').reverse().toArray(), []) || [];
   const categorias = useLiveQuery(() => db.categorias.toArray(), []) || [];
   const subcategorias = useLiveQuery(() => db.subcategorias.toArray(), []) || [];
   const contas = useLiveQuery(() => db.contas.orderBy('ordem').toArray(), []) || [];
   const recorrencias = useLiveQuery(() => db.recorrencias.toArray(), []) || [];
+  const excecoesValor = useLiveQuery(() => db.excecoesValor.toArray(), []) || [];
 
   // Previsão dos lançamentos fixos futuros pro ano/mês filtrado — mesma
   // lógica do Resumo (não grava nada no banco, só dá visibilidade).
   const previsoes = useMemo(
-    () => projetarTodasAsRecorrencias(recorrencias, entradasReais, filtroAno, filtroMes === 0 ? 12 : filtroMes),
-    [recorrencias, entradasReais, filtroAno, filtroMes]
+    () => projetarTodasAsRecorrencias(recorrencias, entradasReais, excecoesValor, filtroAno, filtroMes === 0 ? 12 : filtroMes),
+    [recorrencias, entradasReais, excecoesValor, filtroAno, filtroMes]
   );
 
   const entradas = useMemo(
@@ -60,6 +64,35 @@ export default function Historico() {
     setExcluindoId(null);
   }
 
+  // Cria uma cópia independente do lançamento (não herda recorrenciaId nem
+  // número de parcela — é um lançamento manual novo) e abre em edição na
+  // hora, pra ajustar data/valor rapidamente se for o caso.
+  async function duplicar(entry) {
+    const novoId = await db.entries.add({
+      tipo: entry.tipo,
+      valor: entry.valor,
+      data: entry.data,
+      categoriaId: entry.categoriaId,
+      subcategoriaId: entry.subcategoriaId ?? null,
+      contaId: entry.contaId ?? null,
+      nota: entry.nota || '',
+      origem: 'manual',
+      externalId: null,
+      recorrenciaId: null,
+      numeroParcela: null,
+      criadoEm: new Date().toISOString()
+    });
+    setMensagem('Lançamento duplicado ✓ — ajuste o que precisar.');
+    setEditandoId(novoId);
+  }
+
+  function descreverFatura(entry) {
+    const conta = contaPorId[entry.contaId];
+    if (!conta || !contaEhCartao(conta)) return null;
+    const { mesFatura, dataVencimento } = calcularFaturaDoLancamento(entry.data, conta.diaFechamento, conta.diaVencimento);
+    return `Fatura de ${NOMES_MESES[mesFatura - 1]} · vence ${formatDateBR(dataVencimento)}`;
+  }
+
   return (
     <div className="page">
       <h1>Histórico</h1>
@@ -82,11 +115,14 @@ export default function Historico() {
         </select>
       </div>
 
+      {mensagem && <p className="mensagem">{mensagem}</p>}
+
       {listaFiltrada.length === 0 && <p className="vazio">Nenhum lançamento neste filtro.</p>}
 
       <ul className="lista-entries">
         {listaFiltrada.map((entry) => {
           const chave = entry.previsto ? `previsto-${entry.recorrenciaId}-${entry.data}` : entry.id;
+          const fatura = !entry.previsto ? descreverFatura(entry) : null;
           return (
           <li key={chave} className={`entry-item${entry.previsto ? ' previsto' : ''}`}>
             {editandoId === entry.id && !entry.previsto ? (
@@ -95,12 +131,17 @@ export default function Historico() {
                 onCancelar={() => setEditandoId(null)}
                 onSalvo={() => setEditandoId(null)}
               />
+            ) : entry.previsto && editandoPrevistoChave === chave ? (
+              <EditarValorPrevisto
+                entry={entry}
+                onCancelar={() => setEditandoPrevistoChave(null)}
+                onSalvo={() => setEditandoPrevistoChave(null)}
+              />
             ) : (
               <div className="entry-linha">
                 <div
                   className="entry-clickable"
-                  style={entry.previsto ? { cursor: 'default' } : undefined}
-                  onClick={() => !entry.previsto && setEditandoId(entry.id)}
+                  onClick={() => (entry.previsto ? setEditandoPrevistoChave(chave) : setEditandoId(entry.id))}
                 >
                   <span className="entry-dot" style={{ background: TIPOS[entry.tipo].cor }} />
                   <div className="entry-info">
@@ -110,6 +151,7 @@ export default function Historico() {
                         ` › ${subcategoriaPorId[entry.subcategoriaId].nome}`}
                       {entry.recorrenciaId && <IconRepeat size={13} />}
                       {entry.previsto && <span className="tag-previsto">Previsto</span>}
+                      {entry.valorAjustado && <span className="tag-previsto tag-ajustado">Valor ajustado</span>}
                     </div>
                     <div className="entry-detalhe">
                       {formatDateBR(entry.data)}
@@ -118,15 +160,21 @@ export default function Historico() {
                       {entry.numeroParcela && recorrenciaPorId[entry.recorrenciaId]?.totalParcelas &&
                         ` · Parcela ${entry.numeroParcela}/${recorrenciaPorId[entry.recorrenciaId].totalParcelas}`}
                     </div>
+                    {fatura && <div className="entry-detalhe entry-fatura">{fatura}</div>}
                   </div>
                   <div className="entry-valor" style={{ color: TIPOS[entry.tipo].cor }}>
                     {formatCurrency(entry.valor)}
                   </div>
                 </div>
                 {!entry.previsto && (
-                  <button type="button" className="btn-excluir-mini" onClick={() => setExcluindoId(entry.id)}>
-                    <IconTrash />
-                  </button>
+                  <>
+                    <button type="button" className="btn-excluir-mini" title="Duplicar" onClick={() => duplicar(entry)}>
+                      <IconCopy />
+                    </button>
+                    <button type="button" className="btn-excluir-mini" title="Excluir" onClick={() => setExcluindoId(entry.id)}>
+                      <IconTrash />
+                    </button>
+                  </>
                 )}
               </div>
             )}
@@ -153,6 +201,12 @@ function EditarEntry({ entry, onCancelar, onSalvo }) {
   const [subcategoriaId, setSubcategoriaId] = useState(entry.subcategoriaId);
   const [contaId, setContaId] = useState(entry.contaId);
   const [nota, setNota] = useState(entry.nota || '');
+  const [repetir, setRepetir] = useState(false);
+  const [modoRepeticao, setModoRepeticao] = useState('infinito'); // 'infinito' | 'parcelas'
+  const [totalParcelas, setTotalParcelas] = useState('3');
+  const [salvando, setSalvando] = useState(false);
+
+  const jaEhRecorrente = !!entry.recorrenciaId;
 
   const categorias = useLiveQuery(
     () => db.categorias.where('tipo').equals(entry.tipo).sortBy('ordem'),
@@ -171,19 +225,42 @@ function EditarEntry({ entry, onCancelar, onSalvo }) {
     return db.subcategorias.add({ categoriaId, nome, ordem: subcategorias.length });
   }
   async function criarConta(nome) {
-    return db.contas.add({ nome, ordem: contas.length, arquivada: false });
+    return db.contas.add({ nome, ordem: contas.length, arquivada: false, tipo: 'conta' });
   }
 
   async function salvar() {
-    await db.entries.update(entry.id, {
-      valor,
-      data,
-      categoriaId,
-      subcategoriaId: subcategoriaId ?? null,
-      contaId: contaId ?? null,
-      nota: nota.trim()
-    });
-    onSalvo();
+    setSalvando(true);
+    try {
+      if (repetir && !jaEhRecorrente) {
+        // Transforma este lançamento avulso num lançamento fixo: remove a
+        // entrada solta e deixa a recorrência gerar a ocorrência do mesmo
+        // mês em seu lugar, já linkada (`recorrenciaId`).
+        const parcelas = modoRepeticao === 'parcelas' ? Number(totalParcelas) : null;
+        await db.entries.delete(entry.id);
+        await criarRecorrencia({
+          tipo: entry.tipo,
+          valor,
+          categoriaId,
+          subcategoriaId: subcategoriaId ?? null,
+          contaId: contaId ?? null,
+          nota: nota.trim(),
+          dataInicio: data,
+          totalParcelas: parcelas
+        });
+      } else {
+        await db.entries.update(entry.id, {
+          valor,
+          data,
+          categoriaId,
+          subcategoriaId: subcategoriaId ?? null,
+          contaId: contaId ?? null,
+          nota: nota.trim()
+        });
+      }
+      onSalvo();
+    } finally {
+      setSalvando(false);
+    }
   }
 
   return (
@@ -205,9 +282,110 @@ function EditarEntry({ entry, onCancelar, onSalvo }) {
         <label>Observação</label>
         <input type="text" value={nota} onChange={(e) => setNota(e.target.value)} />
       </div>
+
+      {jaEhRecorrente ? (
+        <p className="repeticao-explicacao"><IconRepeat size={13} /> Esta é uma ocorrência de um lançamento fixo — pausar ou excluir a recorrência é feito em "Lançar".</p>
+      ) : (
+        <>
+          <label className="switch-row">
+            <span className="switch-label"><IconRepeat size={17} /> Tornar recorrente</span>
+            <span className={`switch ${repetir ? 'ativo' : ''}`} onClick={() => setRepetir((v) => !v)} />
+          </label>
+
+          {repetir && (
+            <div className="repeticao-opcoes">
+              <div className="tipo-tabs" style={{ marginBottom: 10 }}>
+                <button
+                  type="button"
+                  className={`tipo-tab ${modoRepeticao === 'infinito' ? 'ativo' : ''}`}
+                  style={modoRepeticao === 'infinito' ? { color: 'var(--blue)' } : undefined}
+                  onClick={() => setModoRepeticao('infinito')}
+                >
+                  Todo mês
+                </button>
+                <button
+                  type="button"
+                  className={`tipo-tab ${modoRepeticao === 'parcelas' ? 'ativo' : ''}`}
+                  style={modoRepeticao === 'parcelas' ? { color: 'var(--blue)' } : undefined}
+                  onClick={() => setModoRepeticao('parcelas')}
+                >
+                  Número de vezes
+                </button>
+              </div>
+
+              {modoRepeticao === 'infinito' ? (
+                <p className="repeticao-explicacao">A partir deste lançamento, vai repetir todo mês, sem parar.</p>
+              ) : (
+                <div className="field">
+                  <label htmlFor="parcelas-edit">Quantas vezes, contando esta (ex: 3 = essa + mais 2)</label>
+                  <input
+                    id="parcelas-edit"
+                    type="number"
+                    min="2"
+                    inputMode="numeric"
+                    value={totalParcelas}
+                    onChange={(e) => setTotalParcelas(e.target.value)}
+                  />
+                </div>
+              )}
+            </div>
+          )}
+        </>
+      )}
+
       <div className="edit-actions">
         <button type="button" className="btn-cancel" onClick={onCancelar}>Cancelar</button>
-        <button type="button" className="btn-primary" onClick={salvar}>Salvar</button>
+        <button type="button" className="btn-primary" disabled={salvando} onClick={salvar}>{salvando ? 'Salvando...' : 'Salvar'}</button>
+      </div>
+    </div>
+  );
+}
+
+// Edição bem mais simples que EditarEntry: um "previsto" não existe de
+// verdade no banco ainda, então só faz sentido ajustar o valor DAQUELE mês
+// específico (ex: conta de luz mais cara em janeiro) — categoria, conta e
+// data continuam vindo da recorrência normalmente. O ajuste vira uma
+// exceção (`excecoesValor`) e é consumido automaticamente quando o mês
+// chegar e o lançamento real for gerado.
+function EditarValorPrevisto({ entry, onCancelar, onSalvo }) {
+  const [valor, setValor] = useState(entry.valor);
+  const [salvando, setSalvando] = useState(false);
+
+  async function salvar() {
+    setSalvando(true);
+    try {
+      await definirValorExcecao(entry.recorrenciaId, entry.anoMes, valor);
+      onSalvo();
+    } finally {
+      setSalvando(false);
+    }
+  }
+
+  async function usarValorPadrao() {
+    setSalvando(true);
+    try {
+      await removerValorExcecao(entry.recorrenciaId, entry.anoMes);
+      onSalvo();
+    } finally {
+      setSalvando(false);
+    }
+  }
+
+  return (
+    <div className="edit-box">
+      <p className="repeticao-explicacao">
+        Esse ajuste vale só para {formatDateBR(entry.data)} — os outros meses deste lançamento fixo continuam com o valor padrão.
+      </p>
+      <div className="field">
+        <label>Valor deste mês</label>
+        <MoneyInput value={valor} onChange={setValor} autoFocus />
+      </div>
+      <div className="edit-actions">
+        <button type="button" className="btn-cancel" onClick={onCancelar}>Cancelar</button>
+        {entry.valorAjustado && (
+          <button type="button" className="btn-cancel" disabled={salvando} onClick={usarValorPadrao}>Usar valor padrão</button>
+        )}
+        <button type="button" className="btn-primary" disabled={salvando} onClick={salvar}>{salvando ? 'Salvando...' : 'Salvar'}</button>
       </div>
     </div>
   );

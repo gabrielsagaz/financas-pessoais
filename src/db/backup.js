@@ -4,7 +4,7 @@ import { anoMesAtualChave } from '../utils/format';
 // Tabelas com dados financeiros (fica de fora `configuracoes`, que guarda o
 // hash do PIN — é uma config do dispositivo, não um dado que faça sentido
 // migrar entre aparelhos junto com o backup).
-const TABELAS_BACKUP = ['categorias', 'subcategorias', 'contas', 'entries', 'recorrencias', 'orcamentos'];
+const TABELAS_BACKUP = ['categorias', 'subcategorias', 'contas', 'entries', 'recorrencias', 'orcamentos', 'excecoesValor'];
 
 // Monta o objeto de backup com todas as tabelas financeiras. Formato próprio
 // e versionado (campo `versao`) — se o esquema do banco mudar no futuro, dá

@@ -41,6 +41,25 @@ Mantido aqui pra não se perder entre conversas.
 
 ## Concluído (set/2026)
 
+- [x] **Ajustar valor de um lançamento fixo só naquele mês** — nos
+  previstos do Histórico, clicar abre uma edição simples só do valor
+  (categoria/conta/data continuam vindo da recorrência). O ajuste vale só
+  pra aquele mês — os outros continuam com o valor padrão. Por baixo,
+  vira uma "exceção" (`excecoesValor`, nova tabela) que é consumida
+  automaticamente quando o mês chega e o lançamento real é gerado.
+- [x] **Tornar recorrente ao editar** — no Histórico, ao editar um
+  lançamento avulso, dá pra ativar "Tornar recorrente" (todo mês ou
+  parcelado). Por baixo do capô, o lançamento solto é substituído pela
+  primeira ocorrência de uma recorrência nova, já linkada.
+- [x] **Duplicar lançamento** — no Histórico, cada lançamento tem um botão
+  de duplicar: cria uma cópia independente (sem herdar recorrência/parcela)
+  e já abre em edição pra ajustar data/valor na hora.
+- [x] **Cartão de crédito (dia de fechamento/vencimento)** — em Categorias →
+  Contas, qualquer conta pode ser marcada como cartão, com dia de
+  fechamento e de vencimento. O Histórico mostra em qual fatura cada gasto
+  cai e quando ela vence (`src/utils/cartao.js`). Só organiza a
+  visualização — não controla saldo da fatura nem soma total por cartão
+  ainda (ideia pra uma futura tela de "Faturas", ver abaixo).
 - [x] **Backup/exportação dos dados** — em Categorias → Dados: exportar
   baixa um `.json` com categorias, subcategorias, contas, lançamentos,
   recorrências e orçamentos (fica de fora `configuracoes`, que guarda o hash
@@ -73,6 +92,10 @@ Mantido aqui pra não se perder entre conversas.
 
 ## Prioridade baixa (mais pra frente)
 
+- [ ] **Tela de "Faturas"** — hoje o cartão só mostra a fatura em cada linha
+  do Histórico. Uma tela dedicada agrupando por fatura (total da fatura,
+  data de vencimento, marcá-la como paga) ficaria mais completa — natural
+  de fazer junto com "Saldo controlado por conta" da Fase 2.
 - [ ] **Publicar na Google Play** — não precisa reescrever em React Native:
   dá pra empacotar o PWA atual como Trusted Web Activity ou via Capacitor.
 - [ ] **Modo escuro** — alternador de tema, aproveitando os tokens de cor já

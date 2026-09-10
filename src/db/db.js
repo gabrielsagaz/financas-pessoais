@@ -59,6 +59,21 @@ db.version(2).stores({
   configuracoes: '++id, &chave'
 });
 
+// v3 — permite ajustar o valor de UMA ocorrência futura específica (ex:
+// conta de luz que varia todo mês) sem mudar o valor padrão da recorrência
+// nem afetar os outros meses. Cada linha é "recorrência X + mês Y = valor
+// Z"; consumida (removida) quando aquele mês vira um lançamento real.
+db.version(3).stores({
+  categorias: '++id, tipo, ordem',
+  subcategorias: '++id, categoriaId, ordem',
+  contas: '++id, ordem',
+  entries: '++id, tipo, data, categoriaId, subcategoriaId, contaId, recorrenciaId, [tipo+data]',
+  recorrencias: '++id, tipo',
+  orcamentos: '++id, &categoriaId',
+  configuracoes: '++id, &chave',
+  excecoesValor: '++id, recorrenciaId'
+});
+
 // -------------------------- Seed inicial (1x) -------------------------------
 
 async function jaTemDados() {

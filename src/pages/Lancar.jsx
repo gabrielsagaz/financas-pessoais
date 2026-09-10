@@ -69,7 +69,7 @@ export default function Lancar() {
 
   async function criarConta(nome) {
     const proximaOrdem = contas.length;
-    return db.contas.add({ nome, ordem: proximaOrdem, arquivada: false });
+    return db.contas.add({ nome, ordem: proximaOrdem, arquivada: false, tipo: 'conta' });
   }
 
   function limparFormulario() {
