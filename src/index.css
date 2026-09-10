@@ -648,6 +648,32 @@ input:focus, select:focus {
 .pin-setup { display: flex; flex-direction: column; align-items: center; gap: 16px; }
 .pin-setup .btn-cancel { margin-top: 4px; }
 
+/* ---------- Dados (backup / reset) ---------- */
+.dados-backup-box {
+  background: var(--surface);
+  border: 1px solid var(--hairline);
+  border-radius: var(--radius-lg);
+  padding: 16px 18px;
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+.dados-backup-linha {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 12px;
+}
+.dados-backup-linha:not(:last-child) { padding-bottom: 16px; border-bottom: 1px solid var(--hairline); }
+.dados-backup-linha button { flex-shrink: 0; }
+
+.dados-backup-descricao {
+  font-size: 12.5px;
+  color: var(--text-secondary);
+  margin-top: 2px;
+}
+
 /* ---------- Opções de repetição (fixo x parcelado) ---------- */
 .repeticao-opcoes {
   background: var(--surface-2);

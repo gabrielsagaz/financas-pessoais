@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useRef } from 'react';
 import { useLiveQuery } from 'dexie-react-hooks';
 import { db } from '../db/db';
 import { TIPOS } from '../db/defaultData';
@@ -7,6 +7,7 @@ import { IconTrash, IconChevron } from '../components/Icons';
 import MoneyInput from '../components/MoneyInput';
 import PinPad from '../components/PinPad';
 import { definirPin, removerPin, pinEstaAtivo } from '../db/security';
+import { exportarBackup, baixarBackupComoArquivo, importarBackup, apagarTodosOsLancamentos } from '../db/backup';
 
 export default function Categorias() {
   const [tipoAtivo, setTipoAtivo] = useState('despesa');
@@ -36,6 +37,9 @@ export default function Categorias() {
 
       <h2 style={{ marginTop: 32 }}>Segurança</h2>
       <Seguranca />
+
+      <h2 style={{ marginTop: 32 }}>Dados</h2>
+      <DadosBackup />
     </div>
   );
 }
@@ -259,6 +263,95 @@ function Seguranca() {
           <button type="button" className="btn-cancel" onClick={() => setConfigurando(false)}>Cancelar</button>
         </div>
       )}
+    </div>
+  );
+}
+
+function DadosBackup() {
+  const inputRef = useRef(null);
+  const [mensagem, setMensagem] = useState(null); // { tipo: 'ok'|'erro', texto }
+  const [confirmandoReset, setConfirmandoReset] = useState(false);
+  const [confirmandoImport, setConfirmandoImport] = useState(null); // arquivo pendente
+
+  async function exportar() {
+    const backup = await exportarBackup();
+    baixarBackupComoArquivo(backup);
+    setMensagem({ tipo: 'ok', texto: 'Backup baixado com sucesso.' });
+  }
+
+  function escolherArquivo() {
+    inputRef.current?.click();
+  }
+
+  function arquivoSelecionado(e) {
+    const arquivo = e.target.files?.[0];
+    e.target.value = ''; // permite selecionar o mesmo arquivo de novo depois
+    if (arquivo) setConfirmandoImport(arquivo);
+  }
+
+  async function confirmarImportacao() {
+    const arquivo = confirmandoImport;
+    setConfirmandoImport(null);
+    try {
+      const texto = await arquivo.text();
+      const objeto = JSON.parse(texto);
+      await importarBackup(objeto);
+      setMensagem({ tipo: 'ok', texto: 'Backup restaurado com sucesso. Os dados anteriores foram substituídos.' });
+    } catch (err) {
+      setMensagem({ tipo: 'erro', texto: `Não foi possível importar: ${err.message}` });
+    }
+  }
+
+  async function confirmarReset() {
+    await apagarTodosOsLancamentos();
+    setConfirmandoReset(false);
+    setMensagem({ tipo: 'ok', texto: 'Todos os lançamentos foram apagados. Categorias, contas e lançamentos fixos continuam configurados.' });
+  }
+
+  return (
+    <div className="dados-backup-box">
+      {mensagem && <p className={`mensagem${mensagem.tipo === 'erro' ? ' erro' : ''}`}>{mensagem.texto}</p>}
+
+      <div className="dados-backup-linha">
+        <div>
+          <strong>Exportar backup</strong>
+          <p className="dados-backup-descricao">Baixa um arquivo .json com todos os seus dados (lançamentos, categorias, contas, lançamentos fixos e orçamentos).</p>
+        </div>
+        <button type="button" className="btn-confirm" onClick={exportar}>Exportar</button>
+      </div>
+
+      <div className="dados-backup-linha">
+        <div>
+          <strong>Importar backup</strong>
+          <p className="dados-backup-descricao">Restaura a partir de um arquivo .json exportado anteriormente. Substitui os dados atuais.</p>
+        </div>
+        <button type="button" className="btn-cancel" onClick={escolherArquivo}>Importar</button>
+        <input ref={inputRef} type="file" accept="application/json" style={{ display: 'none' }} onChange={arquivoSelecionado} />
+      </div>
+
+      <div className="dados-backup-linha">
+        <div>
+          <strong>Apagar todos os lançamentos</strong>
+          <p className="dados-backup-descricao">Remove permanentemente todo o histórico de receitas, despesas e investimentos. Exporte um backup antes, se quiser guardar esses dados.</p>
+        </div>
+        <button type="button" className="btn-danger" onClick={() => setConfirmandoReset(true)}>Apagar tudo</button>
+      </div>
+
+      <ConfirmDialog
+        open={confirmandoReset}
+        title="Apagar todos os lançamentos?"
+        message="Essa ação não pode ser desfeita. Se você não exportou um backup ainda, cancele e exporte antes de continuar."
+        onConfirm={confirmarReset}
+        onCancel={() => setConfirmandoReset(false)}
+      />
+
+      <ConfirmDialog
+        open={confirmandoImport !== null}
+        title="Importar backup?"
+        message="Isso vai SUBSTITUIR todos os dados atuais pelos dados do arquivo selecionado. Essa ação não pode ser desfeita."
+        onConfirm={confirmarImportacao}
+        onCancel={() => setConfirmandoImport(null)}
+      />
     </div>
   );
 }

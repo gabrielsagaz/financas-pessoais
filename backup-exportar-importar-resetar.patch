@@ -1,0 +1,278 @@
+diff --git a/ROADMAP.md b/ROADMAP.md
+index 70f35f9..ed0c8d2 100644
+--- a/ROADMAP.md
++++ b/ROADMAP.md
+@@ -39,12 +39,29 @@ Mantido aqui pra não se perder entre conversas.
+   - Quando o mês realmente chega e o app é aberto, o lançamento real é
+     gerado normalmente e substitui a versão prevista na lista.
+ 
++## Concluído (set/2026)
++
++- [x] **Backup/exportação dos dados** — em Categorias → Dados: exportar
++  baixa um `.json` com categorias, subcategorias, contas, lançamentos,
++  recorrências e orçamentos (fica de fora `configuracoes`, que guarda o hash
++  do PIN — é config do dispositivo, não dado financeiro). Importar substitui
++  totalmente os dados atuais pelos do arquivo (`src/db/backup.js`).
++- [x] **Apagar todos os lançamentos** — reset do histórico (`entries`),
++  mantendo categorias/contas/recorrências. Ao apagar, `ultimaGeracao` de cada
++  recorrência é reposicionada pro mês atual, senão elas regenerariam do zero
++  os mesmos lançamentos que acabaram de ser apagados.
++
++## Decisão registrada — Login com Google (adiado)
++
++- Avaliado pedir login com Google agora para ter sessão de usuário. Adiado
++  a pedido do usuário: só faz sentido introduzir login/conta quando a Fase 2
++  trouxer backend/servidor de verdade (multiusuário e/ou sincronização entre
++  dispositivos) — hoje o app é 100% local, sem servidor, e um login sozinho
++  não mudaria onde os dados ficam guardados. Retomar essa conversa junto com
++  "Saldo controlado por conta" / infraestrutura de servidor da Fase 2.
++
+ ## Prioridade alta (ainda não iniciado)
+ 
+-- [ ] **Backup/exportação dos dados** — exportar/importar JSON (ou .xlsx) dos
+-  lançamentos. Hoje os dados só existem no IndexedDB daquele
+-  navegador/dispositivo — sem isso, limpar cache ou trocar de celular perde
+-  tudo.
+ - [ ] **Saldo controlado por conta** — saldo inicial por conta + saldo
+   corrente calculado (o modelo de dados já foi pensado pra isso desde a
+   Fase 1: `entries.valor` sempre positivo, sinal pelo `tipo`).
+diff --git a/src/db/backup.js b/src/db/backup.js
+new file mode 100644
+index 0000000..79d187d
+--- /dev/null
++++ b/src/db/backup.js
+@@ -0,0 +1,73 @@
++import { db } from './db';
++import { anoMesAtualChave } from '../utils/format';
++
++// Tabelas com dados financeiros (fica de fora `configuracoes`, que guarda o
++// hash do PIN — é uma config do dispositivo, não um dado que faça sentido
++// migrar entre aparelhos junto com o backup).
++const TABELAS_BACKUP = ['categorias', 'subcategorias', 'contas', 'entries', 'recorrencias', 'orcamentos'];
++
++// Monta o objeto de backup com todas as tabelas financeiras. Formato próprio
++// e versionado (campo `versao`) — se o esquema do banco mudar no futuro, dá
++// pra migrar backups antigos ao importar em vez de simplesmente rejeitar.
++export async function exportarBackup() {
++  const dados = {};
++  for (const tabela of TABELAS_BACKUP) {
++    dados[tabela] = await db[tabela].toArray();
++  }
++  return {
++    app: 'financas-pessoais',
++    versao: 1,
++    exportadoEm: new Date().toISOString(),
++    dados
++  };
++}
++
++export function baixarBackupComoArquivo(backup) {
++  const nomeArquivo = `financas-backup-${backup.exportadoEm.slice(0, 10)}.json`;
++  const blob = new Blob([JSON.stringify(backup, null, 2)], { type: 'application/json' });
++  const url = URL.createObjectURL(blob);
++  const a = document.createElement('a');
++  a.href = url;
++  a.download = nomeArquivo;
++  document.body.appendChild(a);
++  a.click();
++  document.body.removeChild(a);
++  URL.revokeObjectURL(url);
++}
++
++// Restaura um backup gerado por `exportarBackup`. SUBSTITUI totalmente os
++// dados atuais (não faz merge com o que já existe) — os IDs originais são
++// preservados pra manter intactas as referências entre tabelas
++// (categoriaId, contaId, recorrenciaId, etc.).
++export async function importarBackup(objetoBackup) {
++  if (!objetoBackup || typeof objetoBackup !== 'object' || !objetoBackup.dados) {
++    throw new Error('Arquivo de backup inválido.');
++  }
++  const { dados } = objetoBackup;
++
++  await db.transaction('rw', TABELAS_BACKUP.map((t) => db[t]), async () => {
++    for (const tabela of TABELAS_BACKUP) {
++      await db[tabela].clear();
++      const linhas = dados[tabela];
++      if (Array.isArray(linhas) && linhas.length > 0) {
++        await db[tabela].bulkAdd(linhas);
++      }
++    }
++  });
++}
++
++// Apaga só os lançamentos (entries) — mantém categorias, contas, orçamentos
++// e as recorrências cadastradas. IMPORTANTE: reposiciona o controle interno
++// `ultimaGeracao` de cada recorrência pro mês atual; sem isso, elas
++// regenerariam do zero (a partir da data de início) os mesmos lançamentos
++// que acabaram de ser apagados na próxima vez que o app for aberto.
++export async function apagarTodosOsLancamentos() {
++  const mesAtual = anoMesAtualChave();
++  await db.transaction('rw', db.entries, db.recorrencias, async () => {
++    await db.entries.clear();
++    const recorrencias = await db.recorrencias.toArray();
++    for (const r of recorrencias) {
++      await db.recorrencias.update(r.id, { ultimaGeracao: mesAtual });
++    }
++  });
++}
+diff --git a/src/index.css b/src/index.css
+index 7693045..2fd96fc 100644
+--- a/src/index.css
++++ b/src/index.css
+@@ -648,6 +648,32 @@ input:focus, select:focus {
+ .pin-setup { display: flex; flex-direction: column; align-items: center; gap: 16px; }
+ .pin-setup .btn-cancel { margin-top: 4px; }
+ 
++/* ---------- Dados (backup / reset) ---------- */
++.dados-backup-box {
++  background: var(--surface);
++  border: 1px solid var(--hairline);
++  border-radius: var(--radius-lg);
++  padding: 16px 18px;
++  display: flex;
++  flex-direction: column;
++  gap: 16px;
++}
++
++.dados-backup-linha {
++  display: flex;
++  justify-content: space-between;
++  align-items: center;
++  gap: 12px;
++}
++.dados-backup-linha:not(:last-child) { padding-bottom: 16px; border-bottom: 1px solid var(--hairline); }
++.dados-backup-linha button { flex-shrink: 0; }
++
++.dados-backup-descricao {
++  font-size: 12.5px;
++  color: var(--text-secondary);
++  margin-top: 2px;
++}
++
+ /* ---------- Opções de repetição (fixo x parcelado) ---------- */
+ .repeticao-opcoes {
+   background: var(--surface-2);
+diff --git a/src/pages/Categorias.jsx b/src/pages/Categorias.jsx
+index 741554e..e61ee6a 100644
+--- a/src/pages/Categorias.jsx
++++ b/src/pages/Categorias.jsx
+@@ -1,4 +1,4 @@
+-import { useState } from 'react';
++import { useState, useRef } from 'react';
+ import { useLiveQuery } from 'dexie-react-hooks';
+ import { db } from '../db/db';
+ import { TIPOS } from '../db/defaultData';
+@@ -7,6 +7,7 @@ import { IconTrash, IconChevron } from '../components/Icons';
+ import MoneyInput from '../components/MoneyInput';
+ import PinPad from '../components/PinPad';
+ import { definirPin, removerPin, pinEstaAtivo } from '../db/security';
++import { exportarBackup, baixarBackupComoArquivo, importarBackup, apagarTodosOsLancamentos } from '../db/backup';
+ 
+ export default function Categorias() {
+   const [tipoAtivo, setTipoAtivo] = useState('despesa');
+@@ -36,6 +37,9 @@ export default function Categorias() {
+ 
+       <h2 style={{ marginTop: 32 }}>Segurança</h2>
+       <Seguranca />
++
++      <h2 style={{ marginTop: 32 }}>Dados</h2>
++      <DadosBackup />
+     </div>
+   );
+ }
+@@ -263,6 +267,95 @@ function Seguranca() {
+   );
+ }
+ 
++function DadosBackup() {
++  const inputRef = useRef(null);
++  const [mensagem, setMensagem] = useState(null); // { tipo: 'ok'|'erro', texto }
++  const [confirmandoReset, setConfirmandoReset] = useState(false);
++  const [confirmandoImport, setConfirmandoImport] = useState(null); // arquivo pendente
++
++  async function exportar() {
++    const backup = await exportarBackup();
++    baixarBackupComoArquivo(backup);
++    setMensagem({ tipo: 'ok', texto: 'Backup baixado com sucesso.' });
++  }
++
++  function escolherArquivo() {
++    inputRef.current?.click();
++  }
++
++  function arquivoSelecionado(e) {
++    const arquivo = e.target.files?.[0];
++    e.target.value = ''; // permite selecionar o mesmo arquivo de novo depois
++    if (arquivo) setConfirmandoImport(arquivo);
++  }
++
++  async function confirmarImportacao() {
++    const arquivo = confirmandoImport;
++    setConfirmandoImport(null);
++    try {
++      const texto = await arquivo.text();
++      const objeto = JSON.parse(texto);
++      await importarBackup(objeto);
++      setMensagem({ tipo: 'ok', texto: 'Backup restaurado com sucesso. Os dados anteriores foram substituídos.' });
++    } catch (err) {
++      setMensagem({ tipo: 'erro', texto: `Não foi possível importar: ${err.message}` });
++    }
++  }
++
++  async function confirmarReset() {
++    await apagarTodosOsLancamentos();
++    setConfirmandoReset(false);
++    setMensagem({ tipo: 'ok', texto: 'Todos os lançamentos foram apagados. Categorias, contas e lançamentos fixos continuam configurados.' });
++  }
++
++  return (
++    <div className="dados-backup-box">
++      {mensagem && <p className={`mensagem${mensagem.tipo === 'erro' ? ' erro' : ''}`}>{mensagem.texto}</p>}
++
++      <div className="dados-backup-linha">
++        <div>
++          <strong>Exportar backup</strong>
++          <p className="dados-backup-descricao">Baixa um arquivo .json com todos os seus dados (lançamentos, categorias, contas, lançamentos fixos e orçamentos).</p>
++        </div>
++        <button type="button" className="btn-confirm" onClick={exportar}>Exportar</button>
++      </div>
++
++      <div className="dados-backup-linha">
++        <div>
++          <strong>Importar backup</strong>
++          <p className="dados-backup-descricao">Restaura a partir de um arquivo .json exportado anteriormente. Substitui os dados atuais.</p>
++        </div>
++        <button type="button" className="btn-cancel" onClick={escolherArquivo}>Importar</button>
++        <input ref={inputRef} type="file" accept="application/json" style={{ display: 'none' }} onChange={arquivoSelecionado} />
++      </div>
++
++      <div className="dados-backup-linha">
++        <div>
++          <strong>Apagar todos os lançamentos</strong>
++          <p className="dados-backup-descricao">Remove permanentemente todo o histórico de receitas, despesas e investimentos. Exporte um backup antes, se quiser guardar esses dados.</p>
++        </div>
++        <button type="button" className="btn-danger" onClick={() => setConfirmandoReset(true)}>Apagar tudo</button>
++      </div>
++
++      <ConfirmDialog
++        open={confirmandoReset}
++        title="Apagar todos os lançamentos?"
++        message="Essa ação não pode ser desfeita. Se você não exportou um backup ainda, cancele e exporte antes de continuar."
++        onConfirm={confirmarReset}
++        onCancel={() => setConfirmandoReset(false)}
++      />
++
++      <ConfirmDialog
++        open={confirmandoImport !== null}
++        title="Importar backup?"
++        message="Isso vai SUBSTITUIR todos os dados atuais pelos dados do arquivo selecionado. Essa ação não pode ser desfeita."
++        onConfirm={confirmarImportacao}
++        onCancel={() => setConfirmandoImport(null)}
++      />
++    </div>
++  );
++}
++
+ function ListaContas() {
+   const contas = useLiveQuery(() => db.contas.orderBy('ordem').toArray()) || [];
+   const [novoNome, setNovoNome] = useState('');

@@ -39,12 +39,29 @@ Mantido aqui pra não se perder entre conversas.
   - Quando o mês realmente chega e o app é aberto, o lançamento real é
     gerado normalmente e substitui a versão prevista na lista.
 
+## Concluído (set/2026)
+
+- [x] **Backup/exportação dos dados** — em Categorias → Dados: exportar
+  baixa um `.json` com categorias, subcategorias, contas, lançamentos,
+  recorrências e orçamentos (fica de fora `configuracoes`, que guarda o hash
+  do PIN — é config do dispositivo, não dado financeiro). Importar substitui
+  totalmente os dados atuais pelos do arquivo (`src/db/backup.js`).
+- [x] **Apagar todos os lançamentos** — reset do histórico (`entries`),
+  mantendo categorias/contas/recorrências. Ao apagar, `ultimaGeracao` de cada
+  recorrência é reposicionada pro mês atual, senão elas regenerariam do zero
+  os mesmos lançamentos que acabaram de ser apagados.
+
+## Decisão registrada — Login com Google (adiado)
+
+- Avaliado pedir login com Google agora para ter sessão de usuário. Adiado
+  a pedido do usuário: só faz sentido introduzir login/conta quando a Fase 2
+  trouxer backend/servidor de verdade (multiusuário e/ou sincronização entre
+  dispositivos) — hoje o app é 100% local, sem servidor, e um login sozinho
+  não mudaria onde os dados ficam guardados. Retomar essa conversa junto com
+  "Saldo controlado por conta" / infraestrutura de servidor da Fase 2.
+
 ## Prioridade alta (ainda não iniciado)
 
-- [ ] **Backup/exportação dos dados** — exportar/importar JSON (ou .xlsx) dos
-  lançamentos. Hoje os dados só existem no IndexedDB daquele
-  navegador/dispositivo — sem isso, limpar cache ou trocar de celular perde
-  tudo.
 - [ ] **Saldo controlado por conta** — saldo inicial por conta + saldo
   corrente calculado (o modelo de dados já foi pensado pra isso desde a
   Fase 1: `entries.valor` sempre positivo, sinal pelo `tipo`).
