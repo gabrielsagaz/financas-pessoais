@@ -1,0 +1,46 @@
+diff --git a/public/sw.js b/public/sw.js
+index 33bd1b8..b40d33d 100644
+--- a/public/sw.js
++++ b/public/sw.js
+@@ -1,7 +1,9 @@
+ // Service worker simples e propositalmente enxuto (MVP).
+-// Estratégia: "stale-while-revalidate" — serve do cache pra abrir rápido
+-// e offline, e atualiza o cache em segundo plano quando há rede.
+-const CACHE_NAME = 'financas-cache-v1';
++// Estratégia: "network-first" — busca a versão mais nova na rede sempre que
++// possível (importante numa fase de desenvolvimento ativo, pra um novo
++// deploy aparecer já na próxima abertura, sem precisar reabrir o app duas
++// vezes) e só cai pro cache quando está sem internet.
++const CACHE_NAME = 'financas-cache-v2';
+ 
+ self.addEventListener('install', (event) => {
+   self.skipWaiting();
+@@ -28,17 +30,17 @@ self.addEventListener('fetch', (event) => {
+ 
+   event.respondWith(
+     caches.open(CACHE_NAME).then(async (cache) => {
+-      const cached = await cache.match(request);
+-      const networkFetch = fetch(request)
+-        .then((response) => {
+-          if (response && response.status === 200) {
+-            cache.put(request, response.clone());
+-          }
+-          return response;
+-        })
+-        .catch(() => cached);
+-
+-      return cached || networkFetch;
++      try {
++        const response = await fetch(request);
++        if (response && response.status === 200) {
++          cache.put(request, response.clone());
++        }
++        return response;
++      } catch (err) {
++        const cached = await cache.match(request);
++        if (cached) return cached;
++        throw err;
++      }
+     })
+   );
+ });
