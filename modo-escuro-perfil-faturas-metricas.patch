@@ -1,0 +1,1765 @@
+diff --git a/ROADMAP.md b/ROADMAP.md
+index 408c231..8c060ca 100644
+--- a/ROADMAP.md
++++ b/ROADMAP.md
+@@ -3,6 +3,33 @@
+ Lista de melhorias discutidas para depois da Fase 1 (MVP), com prioridade.
+ Mantido aqui pra não se perder entre conversas.
+ 
++## Concluído (set/2026) — modo escuro, perfil, faturas e métricas
++
++- [x] **Modo escuro** — `Automático` (padrão, segue `prefers-color-scheme`
++  do sistema), `Claro` ou `Escuro` (força independente do sistema),
++  configurável em Perfil → Preferências. Implementado só com variáveis CSS
++  (`:root[data-theme]` em `src/index.css`) reaproveitando os mesmos nomes já
++  usados em todo o app — nenhum componente precisou saber em que tema está.
++- [x] **Tela de Perfil** (ícone no canto superior direito, fora das abas) —
++  nome + emoji como avatar (perfil local, sem login/foto — login com Google
++  segue adiado pra quando houver servidor). As seções **Contas**,
++  **Segurança** (PIN) e **Dados** (backup/reset), que antes ficavam em
++  Categorias, foram movidas pra cá — Categorias ficou só com a gestão de
++  categorias/subcategorias/orçamento.
++- [x] **Tela de Faturas** (acessível por um link no Resumo, não é aba) —
++  agrupa os gastos de cada cartão por fatura (fechamento/vencimento),
++  mostrando o total e uma tag de status: "Em aberto" (fatura atual),
++  "Prevista" (inclui lançamentos fixos futuros) ou "Fechada". Não tem
++  "marcar como paga" separado — isso já é coberto pelo saldo da conta
++  (pagar a fatura = registrar uma transferência pra ela, que traz o saldo
++  negativo de volta pra perto de zero).
++- [x] **Métricas no Resumo** (dashboard) — visíveis quando um mês
++  específico está selecionado: variação de despesas vs. mês anterior,
++  sequência de meses seguidos com saldo positivo, maior categoria de gasto
++  do mês, maior lançamento individual, % de despesas fixas vs. variáveis
++  (usando `recorrenciaId`), e uma linha de média móvel de despesa dos
++  últimos 3 meses sobreposta ao gráfico de barras do ano.
++
+ ## Em andamento (prioridade média — iniciado em set/2026)
+ 
+ - [x] **Lançamentos fixos/recorrentes** — repetição mensal automática
+@@ -17,7 +44,7 @@ Mantido aqui pra não se perder entre conversas.
+   despesa (configurado em Categorias → categoria expandida), com barra de
+   progresso no Resumo (só quando um mês específico está selecionado).
+ - [x] **Trava de acesso (PIN)** — código de 4 dígitos, hash local (SHA-256),
+-  configurado em Categorias → Segurança. Sem biometria por enquanto (Web
++  configurado em Perfil → Segurança. Sem biometria por enquanto (Web
+   Authentication API é mais complexa e instável entre navegadores — avaliar
+   se valer a pena depois).
+ 
+@@ -54,13 +81,13 @@ Mantido aqui pra não se perder entre conversas.
+ - [x] **Duplicar lançamento** — no Histórico, cada lançamento tem um botão
+   de duplicar: cria uma cópia independente (sem herdar recorrência/parcela)
+   e já abre em edição pra ajustar data/valor na hora.
+-- [x] **Cartão de crédito (dia de fechamento/vencimento)** — em Categorias →
++- [x] **Cartão de crédito (dia de fechamento/vencimento)** — em Perfil →
+   Contas, qualquer conta pode ser marcada como cartão, com dia de
+   fechamento e de vencimento. O Histórico mostra em qual fatura cada gasto
+   cai e quando ela vence (`src/utils/cartao.js`). Só organiza a
+   visualização — não controla saldo da fatura nem soma total por cartão
+   ainda (ideia pra uma futura tela de "Faturas", ver abaixo).
+-- [x] **Backup/exportação dos dados** — em Categorias → Dados: exportar
++- [x] **Backup/exportação dos dados** — em Perfil → Dados: exportar
+   baixa um `.json` com categorias, subcategorias, contas, lançamentos,
+   recorrências e orçamentos (fica de fora `configuracoes`, que guarda o hash
+   do PIN — é config do dispositivo, não dado financeiro). Importar substitui
+@@ -95,12 +122,12 @@ Mantido aqui pra não se perder entre conversas.
+     a partir do histórico antigo — o usuário informa o valor atual ao
+     ativar, e o app soma/subtrai só o que aconteceu a partir dali
+     (`saldoInicialData`). Uma conta só passa a ter saldo controlado quando
+-    isso é explicitamente ativado em Categorias → Contas; até lá continua
++    isso é explicitamente ativado em Perfil → Contas; até lá continua
+     sendo só etiqueta, como sempre foi.
+-  - "Recalibrar" (Categorias → Contas → conta expandida) reposiciona a
++  - "Recalibrar" (Perfil → Contas → conta expandida) reposiciona a
+     referência pro saldo de hoje de novo, pra quando o saldo calculado não
+     bater com a realidade (lançamento esquecido, etc).
+-  - Saldo por conta aparece em dois lugares: Categorias → Contas (ao lado
++  - Saldo por conta aparece em dois lugares: Perfil → Contas (ao lado
+     do nome) e Resumo (seção "Saldo por conta", sempre "agora" — não
+     depende do filtro de ano/mês da tela).
+   - Lógica em `src/db/saldos.js`. Nada disso quebra contas que nunca
+@@ -116,13 +143,7 @@ Mantido aqui pra não se perder entre conversas.
+ 
+ ## Prioridade baixa (mais pra frente)
+ 
+-- [ ] **Tela de "Faturas"** — hoje o cartão só mostra a fatura em cada linha
+-  do Histórico. Uma tela dedicada agrupando por fatura (total da fatura,
+-  data de vencimento, marcá-la como paga) ficaria mais completa — natural
+-  de fazer junto com "Saldo controlado por conta" da Fase 2.
+ - [ ] **Publicar na Google Play** — não precisa reescrever em React Native:
+   dá pra empacotar o PWA atual como Trusted Web Activity ou via Capacitor.
+-- [ ] **Modo escuro** — alternador de tema, aproveitando os tokens de cor já
+-  centralizados no `index.css`.
+ - [ ] **Busca no histórico e relatórios exportáveis** — busca por texto nos
+   lançamentos; exportar o resumo mensal como PDF/imagem.
+diff --git a/src/App.jsx b/src/App.jsx
+index 43cfd71..0d150dc 100644
+--- a/src/App.jsx
++++ b/src/App.jsx
+@@ -1,5 +1,6 @@
+ import { useState, useEffect } from 'react';
+-import { iniciarBancoSeVazio } from './db/db';
++import { useLiveQuery } from 'dexie-react-hooks';
++import { iniciarBancoSeVazio, db } from './db/db';
+ import { gerarLancamentosPendentes } from './db/recorrencias';
+ import { pinEstaAtivo } from './db/security';
+ import BottomNav from './components/BottomNav';
+@@ -8,12 +9,21 @@ import Resumo from './pages/Resumo';
+ import Lancar from './pages/Lancar';
+ import Historico from './pages/Historico';
+ import Categorias from './pages/Categorias';
++import Perfil from './pages/Perfil';
++import Faturas from './pages/Faturas';
++import { IconUser } from './components/Icons';
+ 
+ export default function App() {
+   const [abaAtiva, setAbaAtiva] = useState('resumo');
++  const [mostrandoPerfil, setMostrandoPerfil] = useState(false);
++  const [mostrandoFaturas, setMostrandoFaturas] = useState(false);
+   const [pronto, setPronto] = useState(false);
+   const [bloqueado, setBloqueado] = useState(false);
+ 
++  const registroTema = useLiveQuery(() => db.configuracoes.where('chave').equals('tema').first(), []);
++  const registroPerfil = useLiveQuery(() => db.configuracoes.where('chave').equals('perfil').first(), []);
++  const emojiPerfil = registroPerfil ? JSON.parse(registroPerfil.valor).emoji : null;
++
+   useEffect(() => {
+     async function iniciar() {
+       await iniciarBancoSeVazio();
+@@ -24,6 +34,19 @@ export default function App() {
+     iniciar();
+   }, []);
+ 
++  // Aplica o tema escolhido (auto/claro/escuro) na tag <html> — o CSS
++  // reage a esse atributo (ver :root[data-theme] em index.css). 'auto' não
++  // seta o atributo, deixando a preferência do sistema (prefers-color-scheme)
++  // decidir sozinha.
++  useEffect(() => {
++    const tema = registroTema?.valor || 'auto';
++    if (tema === 'auto') {
++      document.documentElement.removeAttribute('data-theme');
++    } else {
++      document.documentElement.setAttribute('data-theme', tema === 'escuro' ? 'dark' : 'light');
++    }
++  }, [registroTema]);
++
+   if (!pronto) {
+     return <div className="loading-screen">Carregando...</div>;
+   }
+@@ -32,10 +55,35 @@ export default function App() {
+     return <LockScreen onUnlock={() => setBloqueado(false)} />;
+   }
+ 
++  if (mostrandoPerfil) {
++    return (
++      <div className="app">
++        <main className="app-content">
++          <Perfil onVoltar={() => setMostrandoPerfil(false)} />
++        </main>
++      </div>
++    );
++  }
++
++  if (mostrandoFaturas) {
++    return (
++      <div className="app">
++        <main className="app-content">
++          <Faturas onVoltar={() => setMostrandoFaturas(false)} />
++        </main>
++      </div>
++    );
++  }
++
+   return (
+     <div className="app">
++      <header className="app-header">
++        <button type="button" className="botao-perfil" onClick={() => setMostrandoPerfil(true)}>
++          {emojiPerfil || <IconUser size={19} />}
++        </button>
++      </header>
+       <main className="app-content">
+-        {abaAtiva === 'resumo' && <Resumo />}
++        {abaAtiva === 'resumo' && <Resumo onAbrirFaturas={() => setMostrandoFaturas(true)} />}
+         {abaAtiva === 'lancar' && <Lancar />}
+         {abaAtiva === 'historico' && <Historico />}
+         {abaAtiva === 'categorias' && <Categorias />}
+diff --git a/src/components/Icons.jsx b/src/components/Icons.jsx
+index 033e357..a926718 100644
+--- a/src/components/Icons.jsx
++++ b/src/components/Icons.jsx
+@@ -112,3 +112,29 @@ export function IconCard({ size = 18 }) {
+     </svg>
+   );
+ }
++
++export function IconUser({ size = 20 }) {
++  return (
++    <svg width={size} height={size} {...base} strokeWidth={1.6}>
++      <circle cx="12" cy="8.5" r="3.5" />
++      <path d="M5 20c0-3.6 3.1-6.5 7-6.5s7 2.9 7 6.5" />
++    </svg>
++  );
++}
++
++export function IconArrowLeft({ size = 20 }) {
++  return (
++    <svg width={size} height={size} {...base} strokeWidth={1.8}>
++      <path d="M19 12H5M11 6l-6 6 6 6" />
++    </svg>
++  );
++}
++
++export function IconFile({ size = 18 }) {
++  return (
++    <svg width={size} height={size} {...base} strokeWidth={1.6}>
++      <path d="M7 3.5h7l4 4V19a1.5 1.5 0 0 1-1.5 1.5h-9A1.5 1.5 0 0 1 6 19V5A1.5 1.5 0 0 1 7 3.5Z" />
++      <path d="M14 3.5V8h4" />
++    </svg>
++  );
++}
+diff --git a/src/db/preferencias.js b/src/db/preferencias.js
+new file mode 100644
+index 0000000..bf92582
+--- /dev/null
++++ b/src/db/preferencias.js
+@@ -0,0 +1,30 @@
++import { db } from './db';
++
++// Mesmo padrão chave/valor genérico usado pelo PIN (`security.js`) — cada
++// preferência é uma linha em `configuracoes`. Escrita fica aqui; leitura
++// reativa é feita direto por quem usa, via useLiveQuery em
++// `db.configuracoes.where('chave').equals(...)`, pra atualizar a tela na
++// hora quando o valor muda.
++export async function salvarConfig(chave, valor) {
++  const registro = await db.configuracoes.where('chave').equals(chave).first();
++  if (registro) {
++    await db.configuracoes.update(registro.id, { valor });
++  } else {
++    await db.configuracoes.add({ chave, valor });
++  }
++}
++
++// Tema: 'auto' (padrão, segue o sistema) | 'claro' | 'escuro'.
++export async function salvarTema(tema) {
++  await salvarConfig('tema', tema);
++}
++
++// Perfil local — nome + emoji como avatar. Sem foto/upload e sem login:
++// login com Google fica pra Fase 2, quando houver servidor de verdade.
++export async function salvarPerfil(perfil) {
++  await salvarConfig('perfil', JSON.stringify(perfil));
++}
++
++export function perfilPadrao() {
++  return { nome: '', emoji: '🙂' };
++}
+diff --git a/src/index.css b/src/index.css
+index ebaff99..56044bb 100644
+--- a/src/index.css
++++ b/src/index.css
+@@ -13,12 +13,15 @@
+   --surface-2: #fbfbfd;
+   --text: #1d1d1f;
+   --text-secondary: #6e6e73;
++  --text-tertiary: #86868b;
+   --hairline: rgba(0, 0, 0, 0.08);
+   --hairline-strong: #d2d2d7;
+   --blue: #0071e3;
+   --blue-tint: rgba(0, 113, 227, 0.1);
+   --green: #1c8a4b;
+   --red: #d92d20;
++  --track-bg: #ececec;
++  --glass-bg: rgba(255, 255, 255, 0.82);
+ 
+   /* Forma */
+   --radius-lg: 20px;
+@@ -30,6 +33,52 @@
+     "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+ }
+ 
++/* Modo escuro: 'auto' (padrão) segue o tema do sistema; um valor salvo em
++   `configuracoes` (chave 'tema') pode forçar claro ou escuro via o atributo
++   data-theme na tag <html>, sobrescrevendo a preferência do sistema. */
++@media (prefers-color-scheme: dark) {
++  :root:not([data-theme="light"]) {
++    --bg: #000000;
++    --surface: #1c1c1e;
++    --surface-2: #131315;
++    --text: #f5f5f7;
++    --text-secondary: #98989d;
++    --text-tertiary: #6e6e73;
++    --hairline: rgba(255, 255, 255, 0.12);
++    --hairline-strong: #38383a;
++    --blue: #409cff;
++    --blue-tint: rgba(64, 156, 255, 0.16);
++    --green: #32d158;
++    --red: #ff453a;
++    --track-bg: #2c2c2e;
++    --glass-bg: rgba(28, 28, 30, 0.75);
++  }
++}
++
++:root[data-theme="dark"] {
++  --bg: #000000;
++  --surface: #1c1c1e;
++  --surface-2: #131315;
++  --text: #f5f5f7;
++  --text-secondary: #98989d;
++  --text-tertiary: #6e6e73;
++  --hairline: rgba(255, 255, 255, 0.12);
++  --hairline-strong: #38383a;
++  --blue: #409cff;
++  --blue-tint: rgba(64, 156, 255, 0.16);
++  --green: #32d158;
++  --red: #ff453a;
++  --track-bg: #2c2c2e;
++  --glass-bg: rgba(28, 28, 30, 0.75);
++}
++
++/* Ajuda controles nativos (calendário do <input type="date">, seta do
++   <select>) a escolherem a variante certa — sem isso eles ficam claros
++   mesmo com o resto da tela escuro. */
++:root { color-scheme: light dark; }
++:root[data-theme="light"] { color-scheme: light; }
++:root[data-theme="dark"] { color-scheme: dark; }
++
+ * { box-sizing: border-box; }
+ 
+ html, body {
+@@ -90,6 +139,92 @@ h2 {
+   margin: 30px 0 12px;
+ }
+ 
++/* ---------- Cabeçalho (botão de perfil) ---------- */
++.app-header {
++  display: flex;
++  justify-content: flex-end;
++  padding: calc(10px + env(safe-area-inset-top)) 18px 0;
++  max-width: 560px;
++  margin: 0 auto;
++  width: 100%;
++}
++
++.botao-perfil {
++  width: 36px;
++  height: 36px;
++  border-radius: 50%;
++  background: var(--surface);
++  border: 1px solid var(--hairline);
++  color: var(--text-secondary);
++  display: flex;
++  align-items: center;
++  justify-content: center;
++  font-size: 18px;
++  line-height: 1;
++  cursor: pointer;
++}
++
++.botao-voltar {
++  display: flex;
++  align-items: center;
++  gap: 6px;
++  background: none;
++  border: none;
++  color: var(--blue);
++  font-size: 15px;
++  font-weight: 500;
++  padding: 0;
++  margin-bottom: 8px;
++  cursor: pointer;
++}
++
++/* ---------- Perfil ---------- */
++.perfil-box {
++  display: flex;
++  align-items: center;
++  gap: 14px;
++  position: relative;
++}
++
++.perfil-avatar {
++  width: 56px;
++  height: 56px;
++  border-radius: 50%;
++  background: var(--surface-2);
++  border: 1px solid var(--hairline);
++  font-size: 28px;
++  display: flex;
++  align-items: center;
++  justify-content: center;
++  flex-shrink: 0;
++  cursor: pointer;
++}
++
++.perfil-emojis {
++  position: absolute;
++  top: 64px;
++  left: 0;
++  z-index: 5;
++  background: var(--surface);
++  border: 1px solid var(--hairline);
++  border-radius: var(--radius-md);
++  padding: 8px;
++  display: grid;
++  grid-template-columns: repeat(6, 1fr);
++  gap: 4px;
++  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.12);
++}
++
++.perfil-emoji-opcao {
++  background: none;
++  border: none;
++  font-size: 20px;
++  padding: 6px;
++  border-radius: 8px;
++  cursor: pointer;
++}
++.perfil-emoji-opcao:active { background: var(--surface-2); }
++
+ /* ---------- Navegação inferior (tab bar em vidro) ---------- */
+ .bottom-nav {
+   position: fixed;
+@@ -97,7 +232,7 @@ h2 {
+   left: 0;
+   right: 0;
+   display: flex;
+-  background: rgba(255, 255, 255, 0.82);
++  background: var(--glass-bg);
+   backdrop-filter: blur(20px) saturate(180%);
+   -webkit-backdrop-filter: blur(20px) saturate(180%);
+   border-top: 0.5px solid var(--hairline-strong);
+@@ -109,7 +244,7 @@ h2 {
+   flex: 1;
+   background: none;
+   border: none;
+-  color: #86868b;
++  color: var(--text-tertiary);
+   display: flex;
+   flex-direction: column;
+   align-items: center;
+@@ -299,7 +434,7 @@ input:focus, select:focus {
+   height: 10px;
+   border-radius: 6px;
+   overflow: hidden;
+-  background: #ececec;
++  background: var(--track-bg);
+ }
+ 
+ .allocation-segment { height: 100%; transition: width 0.3s ease; }
+@@ -383,7 +518,7 @@ input:focus, select:focus {
+ .btn-excluir-mini {
+   background: none;
+   border: none;
+-  color: #a1a1a6;
++  color: var(--text-tertiary);
+   padding: 0 16px;
+   display: flex;
+   align-items: center;
+@@ -421,7 +556,7 @@ input:focus, select:focus {
+   color: var(--text);
+ }
+ 
+-.expand-icon { color: #a1a1a6; display: flex; align-items: center; padding: 0 4px; }
++.expand-icon { color: var(--text-tertiary); display: flex; align-items: center; padding: 0 4px; }
+ 
+ .subcategorias-lista {
+   padding: 4px 12px 12px 24px;
+@@ -515,7 +650,7 @@ input:focus, select:focus {
+   width: 48px;
+   height: 28px;
+   border-radius: 999px;
+-  background: #d2d2d7;
++  background: var(--hairline-strong);
+   position: relative;
+   display: inline-block;
+   transition: background-color 0.2s ease;
+@@ -562,7 +697,7 @@ input:focus, select:focus {
+ .orcamento-barra {
+   height: 7px;
+   border-radius: 5px;
+-  background: #ececec;
++  background: var(--track-bg);
+   overflow: hidden;
+ }
+ 
+@@ -650,7 +785,43 @@ input:focus, select:focus {
+ 
+ .tag-ajustado { border-color: var(--blue); color: var(--blue); }
+ 
+-.entry-fatura { color: #a1a1a6; font-size: 12px; }
++.entry-fatura { color: var(--text-tertiary); font-size: 12px; }
++
++.link-faturas {
++  display: inline-flex;
++  align-items: center;
++  gap: 6px;
++  background: none;
++  border: none;
++  color: var(--blue);
++  font-size: 14px;
++  font-weight: 500;
++  padding: 0;
++  margin: -12px 0 20px;
++  cursor: pointer;
++}
++
++.metricas-grid {
++  display: grid;
++  grid-template-columns: 1fr 1fr;
++  gap: 10px;
++  margin-bottom: 8px;
++}
++
++.metrica-card {
++  background: var(--surface);
++  border: 1px solid var(--hairline);
++  border-radius: var(--radius-md);
++  padding: 12px 14px;
++  display: flex;
++  flex-direction: column;
++  gap: 4px;
++}
++.metrica-card-wide { grid-column: 1 / -1; }
++
++.metrica-label { font-size: 12px; color: var(--text-secondary); }
++.metrica-valor { font-size: 15px; font-weight: 700; }
++.metrica-neutra { color: var(--text); font-weight: 600; font-size: 14px; }
+ 
+ .saldo-contas-lista { display: flex; flex-direction: column; gap: 10px; }
+ .saldo-conta-linha { display: flex; justify-content: space-between; align-items: center; font-size: 14.5px; }
+@@ -672,6 +843,32 @@ input:focus, select:focus {
+ .config-cartao-dias .field label { margin: 0; }
+ .config-cartao-dias .field input { width: 64px; text-align: center; }
+ 
++/* ---------- Faturas ---------- */
++.fatura-cartao-bloco { margin-bottom: 8px; }
++.fatura-cartao-bloco h2 { display: flex; align-items: center; gap: 7px; }
++.fatura-lista { display: flex; flex-direction: column; gap: 4px; }
++.fatura-item {
++  display: flex;
++  justify-content: space-between;
++  align-items: center;
++  padding: 10px 0;
++}
++.fatura-item:not(:last-child) { border-bottom: 1px solid var(--hairline); }
++.fatura-mes { font-size: 15px; font-weight: 600; }
++.fatura-vencimento { font-size: 12.5px; color: var(--text-secondary); margin-top: 2px; }
++.fatura-direita { display: flex; flex-direction: column; align-items: flex-end; gap: 4px; }
++.fatura-tag {
++  font-size: 10.5px;
++  font-weight: 700;
++  text-transform: uppercase;
++  letter-spacing: 0.03em;
++  padding: 1px 7px;
++  border-radius: 4px;
++}
++.fatura-tag-aberta { background: var(--blue-tint); color: var(--blue); }
++.fatura-tag-futura { background: var(--hairline); color: var(--text-secondary); }
++.fatura-tag-fechada { background: var(--hairline); color: var(--text-tertiary); }
++
+ /* ---------- Dados (backup / reset) ---------- */
+ .dados-backup-box {
+   background: var(--surface);
+diff --git a/src/pages/Categorias.jsx b/src/pages/Categorias.jsx
+index 513e3dd..fcc3f38 100644
+--- a/src/pages/Categorias.jsx
++++ b/src/pages/Categorias.jsx
+@@ -1,23 +1,17 @@
+-import { useState, useRef, useMemo } from 'react';
++import { useState } from 'react';
+ import { useLiveQuery } from 'dexie-react-hooks';
+ import { db } from '../db/db';
+ import { TIPOS } from '../db/defaultData';
+ import ConfirmDialog from '../components/ConfirmDialog';
+-import { IconTrash, IconChevron, IconCard } from '../components/Icons';
++import { IconTrash, IconChevron } from '../components/Icons';
+ import MoneyInput from '../components/MoneyInput';
+-import PinPad from '../components/PinPad';
+-import { definirPin, removerPin, pinEstaAtivo } from '../db/security';
+-import { exportarBackup, baixarBackupComoArquivo, importarBackup, apagarTodosOsLancamentos } from '../db/backup';
+-import { contaEhCartao } from '../utils/cartao';
+-import { contaTemSaldoControlado, calcularSaldoConta } from '../db/saldos';
+-import { formatCurrency, formatDateBR, hojeISO } from '../utils/format';
+ 
+ export default function Categorias() {
+   const [tipoAtivo, setTipoAtivo] = useState('despesa');
+ 
+   return (
+     <div className="page">
+-      <h1>Categorias e contas</h1>
++      <h1>Categorias</h1>
+ 
+       <div className="tipo-tabs">
+         {Object.entries(TIPOS).map(([key, info]) => (
+@@ -34,15 +28,6 @@ export default function Categorias() {
+       </div>
+ 
+       <ListaCategorias tipo={tipoAtivo} />
+-
+-      <h2 style={{ marginTop: 32 }}>Contas</h2>
+-      <ListaContas />
+-
+-      <h2 style={{ marginTop: 32 }}>Segurança</h2>
+-      <Seguranca />
+-
+-      <h2 style={{ marginTop: 32 }}>Dados</h2>
+-      <DadosBackup />
+     </div>
+   );
+ }
+@@ -209,364 +194,3 @@ function OrcamentoCategoria({ categoriaId }) {
+     </div>
+   );
+ }
+-
+-function Seguranca() {
+-  const ativo = useLiveQuery(() => pinEstaAtivo(), []);
+-  const [configurando, setConfigurando] = useState(false);
+-  const [etapa, setEtapa] = useState('criar'); // 'criar' | 'confirmar'
+-  const [primeiroPin, setPrimeiroPin] = useState('');
+-  const [erro, setErro] = useState('');
+-
+-  function iniciarConfiguracao() {
+-    setConfigurando(true);
+-    setEtapa('criar');
+-    setPrimeiroPin('');
+-    setErro('');
+-  }
+-
+-  async function receberPin(pin) {
+-    if (etapa === 'criar') {
+-      setPrimeiroPin(pin);
+-      setEtapa('confirmar');
+-    } else {
+-      if (pin === primeiroPin) {
+-        await definirPin(pin);
+-        setConfigurando(false);
+-      } else {
+-        setErro('Os códigos não coincidem. Tente de novo.');
+-        setEtapa('criar');
+-        setPrimeiroPin('');
+-      }
+-    }
+-  }
+-
+-  async function desativar() {
+-    await removerPin();
+-  }
+-
+-  return (
+-    <div className="seguranca-box">
+-      {!configurando ? (
+-        <>
+-          <div className="seguranca-status">
+-            <span>PIN de acesso</span>
+-            <strong>{ativo ? 'Ativado' : 'Desativado'}</strong>
+-          </div>
+-          {ativo ? (
+-            <button type="button" className="btn-cancel" onClick={desativar}>Desativar PIN</button>
+-          ) : (
+-            <button type="button" className="btn-confirm" onClick={iniciarConfiguracao}>Configurar PIN</button>
+-          )}
+-        </>
+-      ) : (
+-        <div className="pin-setup">
+-          <p className="lock-subtitulo">{etapa === 'criar' ? 'Crie um código de 4 dígitos' : 'Digite de novo pra confirmar'}</p>
+-          {erro && <p className="mensagem erro">{erro}</p>}
+-          <PinPad key={etapa} onComplete={receberPin} />
+-          <button type="button" className="btn-cancel" onClick={() => setConfigurando(false)}>Cancelar</button>
+-        </div>
+-      )}
+-    </div>
+-  );
+-}
+-
+-function DadosBackup() {
+-  const inputRef = useRef(null);
+-  const [mensagem, setMensagem] = useState(null); // { tipo: 'ok'|'erro', texto }
+-  const [confirmandoReset, setConfirmandoReset] = useState(false);
+-  const [confirmandoImport, setConfirmandoImport] = useState(null); // arquivo pendente
+-
+-  async function exportar() {
+-    const backup = await exportarBackup();
+-    baixarBackupComoArquivo(backup);
+-    setMensagem({ tipo: 'ok', texto: 'Backup baixado com sucesso.' });
+-  }
+-
+-  function escolherArquivo() {
+-    inputRef.current?.click();
+-  }
+-
+-  function arquivoSelecionado(e) {
+-    const arquivo = e.target.files?.[0];
+-    e.target.value = ''; // permite selecionar o mesmo arquivo de novo depois
+-    if (arquivo) setConfirmandoImport(arquivo);
+-  }
+-
+-  async function confirmarImportacao() {
+-    const arquivo = confirmandoImport;
+-    setConfirmandoImport(null);
+-    try {
+-      const texto = await arquivo.text();
+-      const objeto = JSON.parse(texto);
+-      await importarBackup(objeto);
+-      setMensagem({ tipo: 'ok', texto: 'Backup restaurado com sucesso. Os dados anteriores foram substituídos.' });
+-    } catch (err) {
+-      setMensagem({ tipo: 'erro', texto: `Não foi possível importar: ${err.message}` });
+-    }
+-  }
+-
+-  async function confirmarReset() {
+-    await apagarTodosOsLancamentos();
+-    setConfirmandoReset(false);
+-    setMensagem({ tipo: 'ok', texto: 'Todos os lançamentos foram apagados. Categorias, contas e lançamentos fixos continuam configurados.' });
+-  }
+-
+-  return (
+-    <div className="dados-backup-box">
+-      {mensagem && <p className={`mensagem${mensagem.tipo === 'erro' ? ' erro' : ''}`}>{mensagem.texto}</p>}
+-
+-      <div className="dados-backup-linha">
+-        <div>
+-          <strong>Exportar backup</strong>
+-          <p className="dados-backup-descricao">Baixa um arquivo .json com todos os seus dados (lançamentos, categorias, contas, lançamentos fixos e orçamentos).</p>
+-        </div>
+-        <button type="button" className="btn-confirm" onClick={exportar}>Exportar</button>
+-      </div>
+-
+-      <div className="dados-backup-linha">
+-        <div>
+-          <strong>Importar backup</strong>
+-          <p className="dados-backup-descricao">Restaura a partir de um arquivo .json exportado anteriormente. Substitui os dados atuais.</p>
+-        </div>
+-        <button type="button" className="btn-cancel" onClick={escolherArquivo}>Importar</button>
+-        <input ref={inputRef} type="file" accept="application/json" style={{ display: 'none' }} onChange={arquivoSelecionado} />
+-      </div>
+-
+-      <div className="dados-backup-linha">
+-        <div>
+-          <strong>Apagar todos os lançamentos</strong>
+-          <p className="dados-backup-descricao">Remove permanentemente todo o histórico de receitas, despesas e investimentos. Exporte um backup antes, se quiser guardar esses dados.</p>
+-        </div>
+-        <button type="button" className="btn-danger" onClick={() => setConfirmandoReset(true)}>Apagar tudo</button>
+-      </div>
+-
+-      <ConfirmDialog
+-        open={confirmandoReset}
+-        title="Apagar todos os lançamentos?"
+-        message="Essa ação não pode ser desfeita. Se você não exportou um backup ainda, cancele e exporte antes de continuar."
+-        onConfirm={confirmarReset}
+-        onCancel={() => setConfirmandoReset(false)}
+-      />
+-
+-      <ConfirmDialog
+-        open={confirmandoImport !== null}
+-        title="Importar backup?"
+-        message="Isso vai SUBSTITUIR todos os dados atuais pelos dados do arquivo selecionado. Essa ação não pode ser desfeita."
+-        onConfirm={confirmarImportacao}
+-        onCancel={() => setConfirmandoImport(null)}
+-      />
+-    </div>
+-  );
+-}
+-
+-function ListaContas() {
+-  const contas = useLiveQuery(() => db.contas.orderBy('ordem').toArray()) || [];
+-  const entradas = useLiveQuery(() => db.entries.toArray()) || [];
+-  const [novoNome, setNovoNome] = useState('');
+-  const [erro, setErro] = useState('');
+-  const [excluindoId, setExcluindoId] = useState(null);
+-  const [expandidaId, setExpandidaId] = useState(null);
+-
+-  async function adicionar() {
+-    const nome = novoNome.trim();
+-    if (!nome) return;
+-    await db.contas.add({ nome, ordem: contas.length, arquivada: false, tipo: 'conta' });
+-    setNovoNome('');
+-  }
+-
+-  async function renomear(conta, novoValor) {
+-    if (!novoValor.trim()) return;
+-    await db.contas.update(conta.id, { nome: novoValor.trim() });
+-  }
+-
+-  async function confirmarExclusao() {
+-    const usada = await db.entries.where('contaId').equals(excluindoId).count();
+-    if (usada > 0) {
+-      setErro(`Não é possível excluir: ${usada} lançamento(s) usam essa conta.`);
+-      setExcluindoId(null);
+-      return;
+-    }
+-    await db.contas.delete(excluindoId);
+-    setErro('');
+-    setExcluindoId(null);
+-  }
+-
+-  return (
+-    <div className="lista-contas">
+-      {erro && <p className="mensagem erro">{erro}</p>}
+-      {contas.map((conta) => {
+-        const saldoAtual = contaTemSaldoControlado(conta) ? calcularSaldoConta(conta, entradas) : null;
+-        return (
+-          <div key={conta.id} className="categoria-card">
+-            <div className="categoria-header" onClick={() => setExpandidaId(expandidaId === conta.id ? null : conta.id)}>
+-              {contaEhCartao(conta) && <IconCard size={16} />}
+-              <input
+-                className="categoria-nome-input"
+-                value={conta.nome}
+-                onClick={(e) => e.stopPropagation()}
+-                onChange={(e) => renomear(conta, e.target.value)}
+-              />
+-              {saldoAtual !== null && (
+-                <span className="saldo-inline" style={{ color: saldoAtual >= 0 ? 'var(--green)' : 'var(--red)' }}>
+-                  {formatCurrency(saldoAtual)}
+-                </span>
+-              )}
+-              <button
+-                type="button"
+-                className="btn-excluir-mini"
+-                onClick={(e) => { e.stopPropagation(); setExcluindoId(conta.id); }}
+-              >
+-                <IconTrash />
+-              </button>
+-              <span className="expand-icon"><IconChevron open={expandidaId === conta.id} /></span>
+-            </div>
+-            {expandidaId === conta.id && (
+-              <>
+-                <ConfigCartao conta={conta} />
+-                <ConfigSaldo conta={conta} entradas={entradas} />
+-              </>
+-            )}
+-          </div>
+-        );
+-      })}
+-      <div className="inline-add">
+-        <input
+-          type="text"
+-          placeholder="Nova conta..."
+-          value={novoNome}
+-          onChange={(e) => setNovoNome(e.target.value)}
+-          onKeyDown={(e) => e.key === 'Enter' && adicionar()}
+-        />
+-        <button type="button" className="btn-confirm" onClick={adicionar}>Adicionar</button>
+-      </div>
+-
+-      <ConfirmDialog
+-        open={excluindoId !== null}
+-        title="Excluir conta?"
+-        message="Só é possível excluir se não houver lançamentos usando esta conta."
+-        onConfirm={confirmarExclusao}
+-        onCancel={() => setExcluindoId(null)}
+-      />
+-    </div>
+-  );
+-}
+-
+-// Configuração de saldo controlado por conta: o usuário informa o saldo
+-// "de hoje" (não recalcula pra trás a partir do histórico antigo) e, a
+-// partir da data em que isso foi informado, o app soma/subtrai o que
+-// entrou e saiu. Se o saldo não bater com a realidade em algum momento
+-// (lançamento esquecido, etc), "recalibrar" reposiciona a referência pro
+-// saldo de hoje de novo.
+-function ConfigSaldo({ conta, entradas }) {
+-  const ativo = contaTemSaldoControlado(conta);
+-  const [configurando, setConfigurando] = useState(false);
+-  const [valorInicial, setValorInicial] = useState(0);
+-  const [valorRecalibrar, setValorRecalibrar] = useState(0);
+-
+-  const saldoAtual = useMemo(() => calcularSaldoConta(conta, entradas), [conta, entradas]);
+-
+-  async function confirmarAtivacao() {
+-    await db.contas.update(conta.id, { saldoInicial: valorInicial, saldoInicialData: hojeISO() });
+-    setConfigurando(false);
+-  }
+-
+-  async function desativar() {
+-    await db.contas.update(conta.id, { saldoInicialData: null });
+-  }
+-
+-  async function recalibrar() {
+-    await db.contas.update(conta.id, { saldoInicial: valorRecalibrar, saldoInicialData: hojeISO() });
+-    setValorRecalibrar(0);
+-  }
+-
+-  return (
+-    <div className="config-cartao">
+-      <label className="switch-row">
+-        <span className="switch-label">Controlar saldo desta conta</span>
+-        <span
+-          className={`switch ${ativo ? 'ativo' : ''}`}
+-          onClick={() => (ativo ? desativar() : setConfigurando((v) => !v))}
+-        />
+-      </label>
+-
+-      {!ativo && configurando && (
+-        <div className="config-cartao-dias">
+-          <div className="field">
+-            <label>Saldo de hoje</label>
+-            <MoneyInput value={valorInicial} onChange={setValorInicial} autoFocus />
+-          </div>
+-          <button type="button" className="btn-confirm" onClick={confirmarAtivacao}>Ativar controle de saldo</button>
+-        </div>
+-      )}
+-
+-      {ativo && (
+-        <>
+-          <div className="saldo-atual-linha">
+-            <span>Saldo atual</span>
+-            <strong style={{ color: saldoAtual >= 0 ? 'var(--green)' : 'var(--red)' }}>{formatCurrency(saldoAtual)}</strong>
+-          </div>
+-          <p className="repeticao-explicacao">
+-            Calculado a partir do saldo informado em {formatDateBR(conta.saldoInicialData)}, somando o que entrou e
+-            saiu depois. Se não bater com a realidade, recalibre com o saldo de hoje:
+-          </p>
+-          <div className="config-cartao-dias">
+-            <div className="field">
+-              <label>Recalibrar saldo (usa a data de hoje)</label>
+-              <MoneyInput value={valorRecalibrar} onChange={setValorRecalibrar} />
+-            </div>
+-            <button type="button" className="btn-cancel" onClick={recalibrar}>Recalibrar</button>
+-          </div>
+-        </>
+-      )}
+-    </div>
+-  );
+-}
+-
+-// Configuração de "cartão de crédito" pra uma conta: dia de fechamento
+-// (quando a fatura atual para de acumular) e dia de vencimento (quando essa
+-// fatura precisa ser paga). Guardado direto na própria conta — não precisa
+-// de tabela nova, só de mais alguns campos.
+-function ConfigCartao({ conta }) {
+-  const ehCartao = contaEhCartao(conta);
+-  const [diaFechamento, setDiaFechamento] = useState(conta.diaFechamento || 1);
+-  const [diaVencimento, setDiaVencimento] = useState(conta.diaVencimento || 10);
+-
+-  async function alternarCartao() {
+-    if (ehCartao) {
+-      await db.contas.update(conta.id, { tipo: 'conta' });
+-    } else {
+-      await db.contas.update(conta.id, { tipo: 'cartao', diaFechamento, diaVencimento });
+-    }
+-  }
+-
+-  async function salvarDias(campo, valor) {
+-    const dia = Math.min(31, Math.max(1, Number(valor) || 1));
+-    if (campo === 'fechamento') setDiaFechamento(dia); else setDiaVencimento(dia);
+-    await db.contas.update(conta.id, { [campo === 'fechamento' ? 'diaFechamento' : 'diaVencimento']: dia });
+-  }
+-
+-  return (
+-    <div className="config-cartao">
+-      <label className="switch-row">
+-        <span className="switch-label"><IconCard size={17} /> É cartão de crédito</span>
+-        <span className={`switch ${ehCartao ? 'ativo' : ''}`} onClick={alternarCartao} />
+-      </label>
+-
+-      {ehCartao && (
+-        <div className="config-cartao-dias">
+-          <div className="field">
+-            <label>Dia de fechamento da fatura</label>
+-            <input type="number" min="1" max="31" value={diaFechamento} onChange={(e) => salvarDias('fechamento', e.target.value)} />
+-          </div>
+-          <div className="field">
+-            <label>Dia de vencimento</label>
+-            <input type="number" min="1" max="31" value={diaVencimento} onChange={(e) => salvarDias('vencimento', e.target.value)} />
+-          </div>
+-          <p className="repeticao-explicacao">
+-            Compras depois do dia de fechamento entram na fatura seguinte. Isso só organiza a visualização no Histórico — não controla saldo nem gera cobrança automática.
+-          </p>
+-        </div>
+-      )}
+-    </div>
+-  );
+-}
+diff --git a/src/pages/Faturas.jsx b/src/pages/Faturas.jsx
+new file mode 100644
+index 0000000..fe6bc3d
+--- /dev/null
++++ b/src/pages/Faturas.jsx
+@@ -0,0 +1,89 @@
++import { useMemo } from 'react';
++import { useLiveQuery } from 'dexie-react-hooks';
++import { db } from '../db/db';
++import { formatCurrency, formatDateBR, hojeISO, NOMES_MESES } from '../utils/format';
++import { calcularFaturaDoLancamento, contaEhCartao } from '../utils/cartao';
++import { projetarTodasAsRecorrencias } from '../db/recorrencias';
++import { IconArrowLeft, IconCard } from '../components/Icons';
++
++export default function Faturas({ onVoltar }) {
++  const contas = useLiveQuery(() => db.contas.orderBy('ordem').toArray(), []) || [];
++  const entradas = useLiveQuery(() => db.entries.toArray(), []) || [];
++  const recorrencias = useLiveQuery(() => db.recorrencias.toArray(), []) || [];
++  const excecoesValor = useLiveQuery(() => db.excecoesValor.toArray(), []) || [];
++
++  const cartoes = useMemo(() => contas.filter(contaEhCartao), [contas]);
++
++  // Projeta os lançamentos fixos dos próximos ~12 meses, pra faturas futuras
++  // de compras já comprometidas (assinaturas, parcelas) aparecerem também,
++  // marcadas como "prevista" em vez de "fechada".
++  const previsoes = useMemo(() => {
++    const anoAlvo = new Date().getFullYear() + 1;
++    return projetarTodasAsRecorrencias(recorrencias, entradas, excecoesValor, anoAlvo, 12);
++  }, [recorrencias, entradas, excecoesValor]);
++
++  const todasEntradas = useMemo(() => [...entradas, ...previsoes], [entradas, previsoes]);
++
++  return (
++    <div className="page">
++      <button type="button" className="botao-voltar" onClick={onVoltar}>
++        <IconArrowLeft size={18} /> Voltar
++      </button>
++      <h1>Faturas</h1>
++
++      {cartoes.length === 0 ? (
++        <p className="vazio">Nenhuma conta marcada como cartão de crédito ainda. Configure em Perfil → Contas.</p>
++      ) : (
++        cartoes.map((cartao) => <FaturasDoCartao key={cartao.id} cartao={cartao} entradas={todasEntradas} />)
++      )}
++    </div>
++  );
++}
++
++function FaturasDoCartao({ cartao, entradas }) {
++  const faturaAtualChave = useMemo(() => {
++    const { anoFatura, mesFatura } = calcularFaturaDoLancamento(hojeISO(), cartao.diaFechamento, cartao.diaVencimento);
++    return `${anoFatura}-${String(mesFatura).padStart(2, '0')}`;
++  }, [cartao]);
++
++  const faturas = useMemo(() => {
++    const doCartao = entradas.filter((e) => e.contaId === cartao.id && e.tipo === 'despesa');
++    const grupos = {};
++    for (const e of doCartao) {
++      const { anoFatura, mesFatura, dataVencimento } = calcularFaturaDoLancamento(e.data, cartao.diaFechamento, cartao.diaVencimento);
++      const chave = `${anoFatura}-${String(mesFatura).padStart(2, '0')}`;
++      if (!grupos[chave]) grupos[chave] = { chave, anoFatura, mesFatura, dataVencimento, total: 0, temPrevisto: false };
++      grupos[chave].total += e.valor;
++      if (e.previsto) grupos[chave].temPrevisto = true;
++    }
++    return Object.values(grupos).sort((a, b) => (a.chave < b.chave ? -1 : 1));
++  }, [entradas, cartao]);
++
++  return (
++    <div className="fatura-cartao-bloco">
++      <h2><IconCard size={16} /> {cartao.nome}</h2>
++      {faturas.length === 0 ? (
++        <p className="vazio">Nenhum gasto neste cartão ainda.</p>
++      ) : (
++        <div className="chart-box fatura-lista">
++          {faturas.map((f) => {
++            const status = f.chave === faturaAtualChave ? 'aberta' : f.temPrevisto ? 'futura' : 'fechada';
++            const rotulo = status === 'aberta' ? 'Em aberto' : status === 'futura' ? 'Prevista' : 'Fechada';
++            return (
++              <div key={f.chave} className="fatura-item">
++                <div>
++                  <div className="fatura-mes">{NOMES_MESES[f.mesFatura - 1]} {f.anoFatura}</div>
++                  <div className="fatura-vencimento">Vence {formatDateBR(f.dataVencimento)}</div>
++                </div>
++                <div className="fatura-direita">
++                  <span className={`fatura-tag fatura-tag-${status}`}>{rotulo}</span>
++                  <strong>{formatCurrency(f.total)}</strong>
++                </div>
++              </div>
++            );
++          })}
++        </div>
++      )}
++    </div>
++  );
++}
+diff --git a/src/pages/Perfil.jsx b/src/pages/Perfil.jsx
+new file mode 100644
+index 0000000..732ee6c
+--- /dev/null
++++ b/src/pages/Perfil.jsx
+@@ -0,0 +1,475 @@
++import { useState, useRef, useMemo, useEffect } from 'react';
++import { useLiveQuery } from 'dexie-react-hooks';
++import { db } from '../db/db';
++import ConfirmDialog from '../components/ConfirmDialog';
++import { IconTrash, IconChevron, IconCard, IconArrowLeft } from '../components/Icons';
++import MoneyInput from '../components/MoneyInput';
++import PinPad from '../components/PinPad';
++import { definirPin, removerPin, pinEstaAtivo } from '../db/security';
++import { exportarBackup, baixarBackupComoArquivo, importarBackup, apagarTodosOsLancamentos } from '../db/backup';
++import { contaEhCartao } from '../utils/cartao';
++import { contaTemSaldoControlado, calcularSaldoConta } from '../db/saldos';
++import { formatCurrency, formatDateBR, hojeISO } from '../utils/format';
++import { salvarPerfil, salvarTema, perfilPadrao } from '../db/preferencias';
++
++const EMOJIS_AVATAR = ['🙂', '😎', '🧑', '👩', '👨', '🐱', '🐶', '🦊', '🐼', '🌟', '💰', '📈'];
++
++export default function Perfil({ onVoltar }) {
++  return (
++    <div className="page">
++      <button type="button" className="botao-voltar" onClick={onVoltar}>
++        <IconArrowLeft size={18} /> Voltar
++      </button>
++      <h1>Perfil</h1>
++
++      <MeuPerfil />
++
++      <h2 style={{ marginTop: 32 }}>Preferências</h2>
++      <PreferenciaTema />
++
++      <h2 style={{ marginTop: 32 }}>Contas</h2>
++      <ListaContas />
++
++      <h2 style={{ marginTop: 32 }}>Segurança</h2>
++      <Seguranca />
++
++      <h2 style={{ marginTop: 32 }}>Dados</h2>
++      <DadosBackup />
++    </div>
++  );
++}
++
++// Perfil local simples — nome + emoji como avatar. Sem foto/upload e sem
++// login (login com Google fica pra Fase 2, quando houver servidor).
++function MeuPerfil() {
++  const registro = useLiveQuery(() => db.configuracoes.where('chave').equals('perfil').first(), []);
++  const perfil = useMemo(() => (registro ? JSON.parse(registro.valor) : perfilPadrao()), [registro]);
++  const [nome, setNome] = useState(perfil.nome);
++  const [escolhendoEmoji, setEscolhendoEmoji] = useState(false);
++
++  // `perfil` só chega de verdade depois que o useLiveQuery resolve a
++  // primeira leitura — sincroniza o campo quando o valor salvo carrega.
++  useEffect(() => { setNome(perfil.nome); }, [perfil.nome]);
++
++  async function salvarNome(novoNome) {
++    setNome(novoNome);
++    await salvarPerfil({ ...perfil, nome: novoNome });
++  }
++
++  async function escolherEmoji(emoji) {
++    await salvarPerfil({ ...perfil, emoji });
++    setEscolhendoEmoji(false);
++  }
++
++  return (
++    <div className="perfil-box">
++      <button type="button" className="perfil-avatar" onClick={() => setEscolhendoEmoji((v) => !v)}>
++        {perfil.emoji}
++      </button>
++      <div className="field" style={{ flex: 1 }}>
++        <label>Nome</label>
++        <input type="text" value={nome} onChange={(e) => salvarNome(e.target.value)} placeholder="Seu nome" />
++      </div>
++
++      {escolhendoEmoji && (
++        <div className="perfil-emojis">
++          {EMOJIS_AVATAR.map((emoji) => (
++            <button key={emoji} type="button" className="perfil-emoji-opcao" onClick={() => escolherEmoji(emoji)}>
++              {emoji}
++            </button>
++          ))}
++        </div>
++      )}
++    </div>
++  );
++}
++
++// Tema: 'auto' (segue o sistema) | 'claro' | 'escuro'. Aplicado pelo
++// App.jsx via atributo data-theme na tag <html>.
++function PreferenciaTema() {
++  const registro = useLiveQuery(() => db.configuracoes.where('chave').equals('tema').first(), []);
++  const tema = registro?.valor || 'auto';
++
++  const OPCOES = [
++    { valor: 'auto', label: 'Automático' },
++    { valor: 'claro', label: 'Claro' },
++    { valor: 'escuro', label: 'Escuro' }
++  ];
++
++  return (
++    <div className="tipo-tabs">
++      {OPCOES.map((o) => (
++        <button
++          key={o.valor}
++          type="button"
++          className={`tipo-tab ${tema === o.valor ? 'ativo' : ''}`}
++          style={tema === o.valor ? { color: 'var(--blue)' } : undefined}
++          onClick={() => salvarTema(o.valor)}
++        >
++          {o.label}
++        </button>
++      ))}
++    </div>
++  );
++}
++
++function Seguranca() {
++  const ativo = useLiveQuery(() => pinEstaAtivo(), []);
++  const [configurando, setConfigurando] = useState(false);
++  const [etapa, setEtapa] = useState('criar'); // 'criar' | 'confirmar'
++  const [primeiroPin, setPrimeiroPin] = useState('');
++  const [erro, setErro] = useState('');
++
++  function iniciarConfiguracao() {
++    setConfigurando(true);
++    setEtapa('criar');
++    setPrimeiroPin('');
++    setErro('');
++  }
++
++  async function receberPin(pin) {
++    if (etapa === 'criar') {
++      setPrimeiroPin(pin);
++      setEtapa('confirmar');
++    } else {
++      if (pin === primeiroPin) {
++        await definirPin(pin);
++        setConfigurando(false);
++      } else {
++        setErro('Os códigos não coincidem. Tente de novo.');
++        setEtapa('criar');
++        setPrimeiroPin('');
++      }
++    }
++  }
++
++  async function desativar() {
++    await removerPin();
++  }
++
++  return (
++    <div className="seguranca-box">
++      {!configurando ? (
++        <>
++          <div className="seguranca-status">
++            <span>PIN de acesso</span>
++            <strong>{ativo ? 'Ativado' : 'Desativado'}</strong>
++          </div>
++          {ativo ? (
++            <button type="button" className="btn-cancel" onClick={desativar}>Desativar PIN</button>
++          ) : (
++            <button type="button" className="btn-confirm" onClick={iniciarConfiguracao}>Configurar PIN</button>
++          )}
++        </>
++      ) : (
++        <div className="pin-setup">
++          <p className="lock-subtitulo">{etapa === 'criar' ? 'Crie um código de 4 dígitos' : 'Digite de novo pra confirmar'}</p>
++          {erro && <p className="mensagem erro">{erro}</p>}
++          <PinPad key={etapa} onComplete={receberPin} />
++          <button type="button" className="btn-cancel" onClick={() => setConfigurando(false)}>Cancelar</button>
++        </div>
++      )}
++    </div>
++  );
++}
++
++function DadosBackup() {
++  const inputRef = useRef(null);
++  const [mensagem, setMensagem] = useState(null); // { tipo: 'ok'|'erro', texto }
++  const [confirmandoReset, setConfirmandoReset] = useState(false);
++  const [confirmandoImport, setConfirmandoImport] = useState(null); // arquivo pendente
++
++  async function exportar() {
++    const backup = await exportarBackup();
++    baixarBackupComoArquivo(backup);
++    setMensagem({ tipo: 'ok', texto: 'Backup baixado com sucesso.' });
++  }
++
++  function escolherArquivo() {
++    inputRef.current?.click();
++  }
++
++  function arquivoSelecionado(e) {
++    const arquivo = e.target.files?.[0];
++    e.target.value = ''; // permite selecionar o mesmo arquivo de novo depois
++    if (arquivo) setConfirmandoImport(arquivo);
++  }
++
++  async function confirmarImportacao() {
++    const arquivo = confirmandoImport;
++    setConfirmandoImport(null);
++    try {
++      const texto = await arquivo.text();
++      const objeto = JSON.parse(texto);
++      await importarBackup(objeto);
++      setMensagem({ tipo: 'ok', texto: 'Backup restaurado com sucesso. Os dados anteriores foram substituídos.' });
++    } catch (err) {
++      setMensagem({ tipo: 'erro', texto: `Não foi possível importar: ${err.message}` });
++    }
++  }
++
++  async function confirmarReset() {
++    await apagarTodosOsLancamentos();
++    setConfirmandoReset(false);
++    setMensagem({ tipo: 'ok', texto: 'Todos os lançamentos foram apagados. Categorias, contas e lançamentos fixos continuam configurados.' });
++  }
++
++  return (
++    <div className="dados-backup-box">
++      {mensagem && <p className={`mensagem${mensagem.tipo === 'erro' ? ' erro' : ''}`}>{mensagem.texto}</p>}
++
++      <div className="dados-backup-linha">
++        <div>
++          <strong>Exportar backup</strong>
++          <p className="dados-backup-descricao">Baixa um arquivo .json com todos os seus dados (lançamentos, categorias, contas, lançamentos fixos e orçamentos).</p>
++        </div>
++        <button type="button" className="btn-confirm" onClick={exportar}>Exportar</button>
++      </div>
++
++      <div className="dados-backup-linha">
++        <div>
++          <strong>Importar backup</strong>
++          <p className="dados-backup-descricao">Restaura a partir de um arquivo .json exportado anteriormente. Substitui os dados atuais.</p>
++        </div>
++        <button type="button" className="btn-cancel" onClick={escolherArquivo}>Importar</button>
++        <input ref={inputRef} type="file" accept="application/json" style={{ display: 'none' }} onChange={arquivoSelecionado} />
++      </div>
++
++      <div className="dados-backup-linha">
++        <div>
++          <strong>Apagar todos os lançamentos</strong>
++          <p className="dados-backup-descricao">Remove permanentemente todo o histórico de receitas, despesas e investimentos. Exporte um backup antes, se quiser guardar esses dados.</p>
++        </div>
++        <button type="button" className="btn-danger" onClick={() => setConfirmandoReset(true)}>Apagar tudo</button>
++      </div>
++
++      <ConfirmDialog
++        open={confirmandoReset}
++        title="Apagar todos os lançamentos?"
++        message="Essa ação não pode ser desfeita. Se você não exportou um backup ainda, cancele e exporte antes de continuar."
++        onConfirm={confirmarReset}
++        onCancel={() => setConfirmandoReset(false)}
++      />
++
++      <ConfirmDialog
++        open={confirmandoImport !== null}
++        title="Importar backup?"
++        message="Isso vai SUBSTITUIR todos os dados atuais pelos dados do arquivo selecionado. Essa ação não pode ser desfeita."
++        onConfirm={confirmarImportacao}
++        onCancel={() => setConfirmandoImport(null)}
++      />
++    </div>
++  );
++}
++
++function ListaContas() {
++  const contas = useLiveQuery(() => db.contas.orderBy('ordem').toArray()) || [];
++  const entradas = useLiveQuery(() => db.entries.toArray()) || [];
++  const [novoNome, setNovoNome] = useState('');
++  const [erro, setErro] = useState('');
++  const [excluindoId, setExcluindoId] = useState(null);
++  const [expandidaId, setExpandidaId] = useState(null);
++
++  async function adicionar() {
++    const nome = novoNome.trim();
++    if (!nome) return;
++    await db.contas.add({ nome, ordem: contas.length, arquivada: false, tipo: 'conta' });
++    setNovoNome('');
++  }
++
++  async function renomear(conta, novoValor) {
++    if (!novoValor.trim()) return;
++    await db.contas.update(conta.id, { nome: novoValor.trim() });
++  }
++
++  async function confirmarExclusao() {
++    const usada = await db.entries.where('contaId').equals(excluindoId).count();
++    if (usada > 0) {
++      setErro(`Não é possível excluir: ${usada} lançamento(s) usam essa conta.`);
++      setExcluindoId(null);
++      return;
++    }
++    await db.contas.delete(excluindoId);
++    setErro('');
++    setExcluindoId(null);
++  }
++
++  return (
++    <div className="lista-contas">
++      {erro && <p className="mensagem erro">{erro}</p>}
++      {contas.map((conta) => {
++        const saldoAtual = contaTemSaldoControlado(conta) ? calcularSaldoConta(conta, entradas) : null;
++        return (
++          <div key={conta.id} className="categoria-card">
++            <div className="categoria-header" onClick={() => setExpandidaId(expandidaId === conta.id ? null : conta.id)}>
++              {contaEhCartao(conta) && <IconCard size={16} />}
++              <input
++                className="categoria-nome-input"
++                value={conta.nome}
++                onClick={(e) => e.stopPropagation()}
++                onChange={(e) => renomear(conta, e.target.value)}
++              />
++              {saldoAtual !== null && (
++                <span className="saldo-inline" style={{ color: saldoAtual >= 0 ? 'var(--green)' : 'var(--red)' }}>
++                  {formatCurrency(saldoAtual)}
++                </span>
++              )}
++              <button
++                type="button"
++                className="btn-excluir-mini"
++                onClick={(e) => { e.stopPropagation(); setExcluindoId(conta.id); }}
++              >
++                <IconTrash />
++              </button>
++              <span className="expand-icon"><IconChevron open={expandidaId === conta.id} /></span>
++            </div>
++            {expandidaId === conta.id && (
++              <>
++                <ConfigCartao conta={conta} />
++                <ConfigSaldo conta={conta} entradas={entradas} />
++              </>
++            )}
++          </div>
++        );
++      })}
++      <div className="inline-add">
++        <input
++          type="text"
++          placeholder="Nova conta..."
++          value={novoNome}
++          onChange={(e) => setNovoNome(e.target.value)}
++          onKeyDown={(e) => e.key === 'Enter' && adicionar()}
++        />
++        <button type="button" className="btn-confirm" onClick={adicionar}>Adicionar</button>
++      </div>
++
++      <ConfirmDialog
++        open={excluindoId !== null}
++        title="Excluir conta?"
++        message="Só é possível excluir se não houver lançamentos usando esta conta."
++        onConfirm={confirmarExclusao}
++        onCancel={() => setExcluindoId(null)}
++      />
++    </div>
++  );
++}
++
++// Configuração de saldo controlado por conta: o usuário informa o saldo
++// "de hoje" (não recalcula pra trás a partir do histórico antigo) e, a
++// partir da data em que isso foi informado, o app soma/subtrai o que
++// entrou e saiu. Se o saldo não bater com a realidade em algum momento
++// (lançamento esquecido, etc), "recalibrar" reposiciona a referência pro
++// saldo de hoje de novo.
++function ConfigSaldo({ conta, entradas }) {
++  const ativo = contaTemSaldoControlado(conta);
++  const [configurando, setConfigurando] = useState(false);
++  const [valorInicial, setValorInicial] = useState(0);
++  const [valorRecalibrar, setValorRecalibrar] = useState(0);
++
++  const saldoAtual = useMemo(() => calcularSaldoConta(conta, entradas), [conta, entradas]);
++
++  async function confirmarAtivacao() {
++    await db.contas.update(conta.id, { saldoInicial: valorInicial, saldoInicialData: hojeISO() });
++    setConfigurando(false);
++  }
++
++  async function desativar() {
++    await db.contas.update(conta.id, { saldoInicialData: null });
++  }
++
++  async function recalibrar() {
++    await db.contas.update(conta.id, { saldoInicial: valorRecalibrar, saldoInicialData: hojeISO() });
++    setValorRecalibrar(0);
++  }
++
++  return (
++    <div className="config-cartao">
++      <label className="switch-row">
++        <span className="switch-label">Controlar saldo desta conta</span>
++        <span
++          className={`switch ${ativo ? 'ativo' : ''}`}
++          onClick={() => (ativo ? desativar() : setConfigurando((v) => !v))}
++        />
++      </label>
++
++      {!ativo && configurando && (
++        <div className="config-cartao-dias">
++          <div className="field">
++            <label>Saldo de hoje</label>
++            <MoneyInput value={valorInicial} onChange={setValorInicial} autoFocus />
++          </div>
++          <button type="button" className="btn-confirm" onClick={confirmarAtivacao}>Ativar controle de saldo</button>
++        </div>
++      )}
++
++      {ativo && (
++        <>
++          <div className="saldo-atual-linha">
++            <span>Saldo atual</span>
++            <strong style={{ color: saldoAtual >= 0 ? 'var(--green)' : 'var(--red)' }}>{formatCurrency(saldoAtual)}</strong>
++          </div>
++          <p className="repeticao-explicacao">
++            Calculado a partir do saldo informado em {formatDateBR(conta.saldoInicialData)}, somando o que entrou e
++            saiu depois. Se não bater com a realidade, recalibre com o saldo de hoje:
++          </p>
++          <div className="config-cartao-dias">
++            <div className="field">
++              <label>Recalibrar saldo (usa a data de hoje)</label>
++              <MoneyInput value={valorRecalibrar} onChange={setValorRecalibrar} />
++            </div>
++            <button type="button" className="btn-cancel" onClick={recalibrar}>Recalibrar</button>
++          </div>
++        </>
++      )}
++    </div>
++  );
++}
++
++// Configuração de "cartão de crédito" pra uma conta: dia de fechamento
++// (quando a fatura atual para de acumular) e dia de vencimento (quando essa
++// fatura precisa ser paga). Guardado direto na própria conta — não precisa
++// de tabela nova, só de mais alguns campos.
++function ConfigCartao({ conta }) {
++  const ehCartao = contaEhCartao(conta);
++  const [diaFechamento, setDiaFechamento] = useState(conta.diaFechamento || 1);
++  const [diaVencimento, setDiaVencimento] = useState(conta.diaVencimento || 10);
++
++  async function alternarCartao() {
++    if (ehCartao) {
++      await db.contas.update(conta.id, { tipo: 'conta' });
++    } else {
++      await db.contas.update(conta.id, { tipo: 'cartao', diaFechamento, diaVencimento });
++    }
++  }
++
++  async function salvarDias(campo, valor) {
++    const dia = Math.min(31, Math.max(1, Number(valor) || 1));
++    if (campo === 'fechamento') setDiaFechamento(dia); else setDiaVencimento(dia);
++    await db.contas.update(conta.id, { [campo === 'fechamento' ? 'diaFechamento' : 'diaVencimento']: dia });
++  }
++
++  return (
++    <div className="config-cartao">
++      <label className="switch-row">
++        <span className="switch-label"><IconCard size={17} /> É cartão de crédito</span>
++        <span className={`switch ${ehCartao ? 'ativo' : ''}`} onClick={alternarCartao} />
++      </label>
++
++      {ehCartao && (
++        <div className="config-cartao-dias">
++          <div className="field">
++            <label>Dia de fechamento da fatura</label>
++            <input type="number" min="1" max="31" value={diaFechamento} onChange={(e) => salvarDias('fechamento', e.target.value)} />
++          </div>
++          <div className="field">
++            <label>Dia de vencimento</label>
++            <input type="number" min="1" max="31" value={diaVencimento} onChange={(e) => salvarDias('vencimento', e.target.value)} />
++          </div>
++          <p className="repeticao-explicacao">
++            Compras depois do dia de fechamento entram na fatura seguinte. Isso só organiza a visualização no Histórico — não controla saldo nem gera cobrança automática.
++          </p>
++        </div>
++      )}
++    </div>
++  );
++}
+diff --git a/src/pages/Resumo.jsx b/src/pages/Resumo.jsx
+index daa48a2..f7d9afd 100644
+--- a/src/pages/Resumo.jsx
++++ b/src/pages/Resumo.jsx
+@@ -1,7 +1,7 @@
+ import { useState, useMemo } from 'react';
+ import { useLiveQuery } from 'dexie-react-hooks';
+ import {
+-  ResponsiveContainer, BarChart, Bar, XAxis, YAxis, Tooltip, Legend,
++  ResponsiveContainer, ComposedChart, Bar, Line, XAxis, YAxis, Tooltip, Legend,
+   PieChart, Pie, Cell
+ } from 'recharts';
+ import { db } from '../db/db';
+@@ -10,8 +10,9 @@ import { formatCurrency, NOMES_MESES, anoMesDe } from '../utils/format';
+ import { projetarTodasAsRecorrencias } from '../db/recorrencias';
+ import { contaTemSaldoControlado, calcularSaldoConta } from '../db/saldos';
+ import AllocationBar from '../components/AllocationBar';
++import { IconFile } from '../components/Icons';
+ 
+-export default function Resumo() {
++export default function Resumo({ onAbrirFaturas }) {
+   const [ano, setAno] = useState(new Date().getFullYear());
+   const [mes, setMes] = useState(new Date().getMonth() + 1); // padrão: mês atual
+ 
+@@ -72,18 +73,35 @@ export default function Resumo() {
+   const percentGasta = totalReceitas > 0 ? (totalDespesas / totalReceitas) * 100 : 0;
+   const percentInvestida = totalReceitas > 0 ? (totalInvestimentos / totalReceitas) * 100 : 0;
+ 
+-  // Gráfico de barras: totais mês a mês, para o ano selecionado inteiro
++  // Gráfico de barras: totais mês a mês, para o ano selecionado inteiro —
++  // acompanhado da média móvel de despesa dos 3 meses anteriores a cada
++  // mês (linha de referência, calculada sobre TODOS os lançamentos reais,
++  // não só os do ano selecionado, pra não zerar em janeiro/fevereiro).
+   const dadosBarras = useMemo(() => {
+     return NOMES_MESES.map((nomeMes, idx) => {
+-      const doMes = entradasDoAno.filter((e) => anoMesDe(e.data).mes === idx + 1);
++      const mesNum = idx + 1;
++      const doMes = entradasDoAno.filter((e) => anoMesDe(e.data).mes === mesNum);
++
++      let a = ano;
++      let m = mesNum;
++      let somaMedia = 0;
++      let countMedia = 0;
++      for (let i = 0; i < 3; i++) {
++        m -= 1;
++        if (m === 0) { m = 12; a -= 1; }
++        const doMesAnt = entradas.filter((e) => { const d = anoMesDe(e.data); return d.ano === a && d.mes === m; });
++        if (doMesAnt.length > 0) { somaMedia += somaPorTipo(doMesAnt, 'despesa'); countMedia++; }
++      }
++
+       return {
+         mes: nomeMes.slice(0, 3),
+         Receita: somaPorTipo(doMes, 'receita'),
+         Despesa: somaPorTipo(doMes, 'despesa'),
+-        Investimento: somaPorTipo(doMes, 'investimento')
++        Investimento: somaPorTipo(doMes, 'investimento'),
++        'Média despesa (3m)': countMedia > 0 ? Math.round(somaMedia / countMedia) : null
+       };
+     });
+-  }, [entradasDoAno]);
++  }, [entradasDoAno, entradas, ano]);
+ 
+   // Gráfico de pizza: divisão de despesas por categoria no período selecionado
+   const dadosPizza = useMemo(() => {
+@@ -119,10 +137,66 @@ export default function Resumo() {
+       .sort((a, b) => (b.gasto / b.limite) - (a.gasto / a.limite));
+   }, [orcamentos, totalDespesaPorCategoriaId, categoriaPorId]);
+ 
++  // ------------------------- Métricas do dashboard -------------------------
++  // Só fazem sentido comparando um mês específico com o histórico — com
++  // "ano inteiro" selecionado, ficam escondidas (ver JSX mais abaixo).
++
++  const mesAnterior = useMemo(() => {
++    if (mes === 0) return null;
++    const anoAnt = mes === 1 ? ano - 1 : ano;
++    const mesAnt = mes === 1 ? 12 : mes - 1;
++    const doMesAnterior = entradas.filter((e) => { const d = anoMesDe(e.data); return d.ano === anoAnt && d.mes === mesAnt; });
++    return { despesa: somaPorTipo(doMesAnterior, 'despesa'), temDados: doMesAnterior.length > 0 };
++  }, [entradas, ano, mes]);
++
++  const variacaoDespesa = mesAnterior?.temDados && mesAnterior.despesa > 0
++    ? ((totalDespesas - mesAnterior.despesa) / mesAnterior.despesa) * 100
++    : null;
++
++  const maiorCategoria = dadosPizza[0] || null;
++  const maiorCategoriaPercent = maiorCategoria && totalDespesas > 0 ? (maiorCategoria.valor / totalDespesas) * 100 : 0;
++
++  const maiorLancamento = useMemo(() => {
++    const despesas = entradasDoPeriodo.filter((e) => e.tipo === 'despesa' && !e.previsto);
++    if (despesas.length === 0) return null;
++    return despesas.reduce((maior, e) => (e.valor > maior.valor ? e : maior), despesas[0]);
++  }, [entradasDoPeriodo]);
++
++  const sequenciaPositiva = useMemo(() => {
++    if (mes === 0) return 0;
++    let streak = 0;
++    let a = ano;
++    let m = mes;
++    for (let i = 0; i < 24; i++) {
++      const doMes = entradas.filter((e) => { const d = anoMesDe(e.data); return d.ano === a && d.mes === m; });
++      if (doMes.length === 0) break;
++      const r = somaPorTipo(doMes, 'receita');
++      const d = somaPorTipo(doMes, 'despesa');
++      const inv = somaPorTipo(doMes, 'investimento');
++      if (r - d - inv <= 0) break;
++      streak++;
++      m -= 1;
++      if (m === 0) { m = 12; a -= 1; }
++    }
++    return streak;
++  }, [entradas, ano, mes]);
++
++  const percentualFixo = useMemo(() => {
++    const despesas = entradasDoPeriodo.filter((e) => e.tipo === 'despesa');
++    const total = despesas.reduce((acc, e) => acc + e.valor, 0);
++    if (total === 0) return null;
++    const fixo = despesas.filter((e) => e.recorrenciaId).reduce((acc, e) => acc + e.valor, 0);
++    return (fixo / total) * 100;
++  }, [entradasDoPeriodo]);
++
+   return (
+     <div className="page">
+       <h1>Resumo</h1>
+ 
++      <button type="button" className="link-faturas" onClick={onAbrirFaturas}>
++        <IconFile size={15} /> Ver faturas de cartão
++      </button>
++
+       <div className="filtros">
+         <select value={ano} onChange={(e) => setAno(Number(e.target.value))}>
+           {anosDisponiveis.map((a) => <option key={a} value={a}>{a}</option>)}
+@@ -164,6 +238,65 @@ export default function Resumo() {
+         <AllocationBar percentGasta={percentGasta} percentInvestida={percentInvestida} />
+       </div>
+ 
++      {mes !== 0 && (
++        <>
++          <h2>Métricas</h2>
++          <div className="metricas-grid">
++            <div className="metrica-card">
++              <span className="metrica-label">Vs. mês anterior</span>
++              {variacaoDespesa === null ? (
++                <span className="metrica-valor metrica-neutra">Sem dados suficientes</span>
++              ) : (
++                <span className="metrica-valor" style={{ color: variacaoDespesa > 0 ? TIPOS.despesa.cor : TIPOS.receita.cor }}>
++                  Despesas {variacaoDespesa > 0 ? '↑' : '↓'} {Math.abs(variacaoDespesa).toFixed(0)}%
++                </span>
++              )}
++            </div>
++
++            <div className="metrica-card">
++              <span className="metrica-label">Sequência no azul</span>
++              <span className="metrica-valor" style={{ color: sequenciaPositiva > 0 ? TIPOS.receita.cor : 'var(--text)' }}>
++                {sequenciaPositiva > 0 ? `${sequenciaPositiva} ${sequenciaPositiva === 1 ? 'mês' : 'meses'}` : '—'}
++              </span>
++            </div>
++
++            <div className="metrica-card">
++              <span className="metrica-label">Maior categoria de gasto</span>
++              {maiorCategoria ? (
++                <span className="metrica-valor metrica-neutra">
++                  {maiorCategoria.nome} · {maiorCategoriaPercent.toFixed(0)}%
++                </span>
++              ) : (
++                <span className="metrica-valor metrica-neutra">—</span>
++              )}
++            </div>
++
++            <div className="metrica-card">
++              <span className="metrica-label">Maior lançamento do mês</span>
++              {maiorLancamento ? (
++                <span className="metrica-valor metrica-neutra">
++                  {categoriaPorId[maiorLancamento.categoriaId]?.nome || '—'} · {formatCurrency(maiorLancamento.valor)}
++                </span>
++              ) : (
++                <span className="metrica-valor metrica-neutra">—</span>
++              )}
++            </div>
++
++            {percentualFixo !== null && (
++              <div className="metrica-card metrica-card-wide">
++                <span className="metrica-label">Despesas fixas vs. variáveis</span>
++                <div className="orcamento-barra" style={{ margin: '6px 0' }}>
++                  <div className="orcamento-barra-fill" style={{ width: `${percentualFixo}%`, background: 'var(--blue)' }} />
++                </div>
++                <span className="metrica-valor metrica-neutra" style={{ fontSize: 13 }}>
++                  {percentualFixo.toFixed(0)}% fixo · {(100 - percentualFixo).toFixed(0)}% variável
++                </span>
++              </div>
++            )}
++          </div>
++        </>
++      )}
++
+       {contasComSaldo.length > 0 && (
+         <>
+           <h2>Saldo por conta</h2>
+@@ -183,7 +316,7 @@ export default function Resumo() {
+       <h2>Receitas x Despesas x Investimentos — {ano}</h2>
+       <div className="chart-box">
+         <ResponsiveContainer width="100%" height={260}>
+-          <BarChart data={dadosBarras}>
++          <ComposedChart data={dadosBarras}>
+             <XAxis dataKey="mes" fontSize={12} />
+             <YAxis fontSize={12} width={40} tickFormatter={(v) => (v >= 1000 ? `${v / 1000}k` : v)} />
+             <Tooltip formatter={(v) => formatCurrency(v)} />
+@@ -191,7 +324,8 @@ export default function Resumo() {
+             <Bar dataKey="Receita" fill={TIPOS.receita.cor} />
+             <Bar dataKey="Despesa" fill={TIPOS.despesa.cor} />
+             <Bar dataKey="Investimento" fill={TIPOS.investimento.cor} />
+-          </BarChart>
++            <Line type="monotone" dataKey="Média despesa (3m)" stroke="var(--text-tertiary)" strokeWidth={2} strokeDasharray="4 3" dot={false} connectNulls />
++          </ComposedChart>
+         </ResponsiveContainer>
+       </div>
+ 

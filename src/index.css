@@ -13,12 +13,15 @@
   --surface-2: #fbfbfd;
   --text: #1d1d1f;
   --text-secondary: #6e6e73;
+  --text-tertiary: #86868b;
   --hairline: rgba(0, 0, 0, 0.08);
   --hairline-strong: #d2d2d7;
   --blue: #0071e3;
   --blue-tint: rgba(0, 113, 227, 0.1);
   --green: #1c8a4b;
   --red: #d92d20;
+  --track-bg: #ececec;
+  --glass-bg: rgba(255, 255, 255, 0.82);
 
   /* Forma */
   --radius-lg: 20px;
@@ -29,6 +32,52 @@
   font-family: -apple-system, BlinkMacSystemFont, "SF Pro Display", "SF Pro Text",
     "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
 }
+
+/* Modo escuro: 'auto' (padrão) segue o tema do sistema; um valor salvo em
+   `configuracoes` (chave 'tema') pode forçar claro ou escuro via o atributo
+   data-theme na tag <html>, sobrescrevendo a preferência do sistema. */
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --bg: #000000;
+    --surface: #1c1c1e;
+    --surface-2: #131315;
+    --text: #f5f5f7;
+    --text-secondary: #98989d;
+    --text-tertiary: #6e6e73;
+    --hairline: rgba(255, 255, 255, 0.12);
+    --hairline-strong: #38383a;
+    --blue: #409cff;
+    --blue-tint: rgba(64, 156, 255, 0.16);
+    --green: #32d158;
+    --red: #ff453a;
+    --track-bg: #2c2c2e;
+    --glass-bg: rgba(28, 28, 30, 0.75);
+  }
+}
+
+:root[data-theme="dark"] {
+  --bg: #000000;
+  --surface: #1c1c1e;
+  --surface-2: #131315;
+  --text: #f5f5f7;
+  --text-secondary: #98989d;
+  --text-tertiary: #6e6e73;
+  --hairline: rgba(255, 255, 255, 0.12);
+  --hairline-strong: #38383a;
+  --blue: #409cff;
+  --blue-tint: rgba(64, 156, 255, 0.16);
+  --green: #32d158;
+  --red: #ff453a;
+  --track-bg: #2c2c2e;
+  --glass-bg: rgba(28, 28, 30, 0.75);
+}
+
+/* Ajuda controles nativos (calendário do <input type="date">, seta do
+   <select>) a escolherem a variante certa — sem isso eles ficam claros
+   mesmo com o resto da tela escuro. */
+:root { color-scheme: light dark; }
+:root[data-theme="light"] { color-scheme: light; }
+:root[data-theme="dark"] { color-scheme: dark; }
 
 * { box-sizing: border-box; }
 
@@ -90,6 +139,92 @@ h2 {
   margin: 30px 0 12px;
 }
 
+/* ---------- Cabeçalho (botão de perfil) ---------- */
+.app-header {
+  display: flex;
+  justify-content: flex-end;
+  padding: calc(10px + env(safe-area-inset-top)) 18px 0;
+  max-width: 560px;
+  margin: 0 auto;
+  width: 100%;
+}
+
+.botao-perfil {
+  width: 36px;
+  height: 36px;
+  border-radius: 50%;
+  background: var(--surface);
+  border: 1px solid var(--hairline);
+  color: var(--text-secondary);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 18px;
+  line-height: 1;
+  cursor: pointer;
+}
+
+.botao-voltar {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  background: none;
+  border: none;
+  color: var(--blue);
+  font-size: 15px;
+  font-weight: 500;
+  padding: 0;
+  margin-bottom: 8px;
+  cursor: pointer;
+}
+
+/* ---------- Perfil ---------- */
+.perfil-box {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  position: relative;
+}
+
+.perfil-avatar {
+  width: 56px;
+  height: 56px;
+  border-radius: 50%;
+  background: var(--surface-2);
+  border: 1px solid var(--hairline);
+  font-size: 28px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  cursor: pointer;
+}
+
+.perfil-emojis {
+  position: absolute;
+  top: 64px;
+  left: 0;
+  z-index: 5;
+  background: var(--surface);
+  border: 1px solid var(--hairline);
+  border-radius: var(--radius-md);
+  padding: 8px;
+  display: grid;
+  grid-template-columns: repeat(6, 1fr);
+  gap: 4px;
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.12);
+}
+
+.perfil-emoji-opcao {
+  background: none;
+  border: none;
+  font-size: 20px;
+  padding: 6px;
+  border-radius: 8px;
+  cursor: pointer;
+}
+.perfil-emoji-opcao:active { background: var(--surface-2); }
+
 /* ---------- Navegação inferior (tab bar em vidro) ---------- */
 .bottom-nav {
   position: fixed;
@@ -97,7 +232,7 @@ h2 {
   left: 0;
   right: 0;
   display: flex;
-  background: rgba(255, 255, 255, 0.82);
+  background: var(--glass-bg);
   backdrop-filter: blur(20px) saturate(180%);
   -webkit-backdrop-filter: blur(20px) saturate(180%);
   border-top: 0.5px solid var(--hairline-strong);
@@ -109,7 +244,7 @@ h2 {
   flex: 1;
   background: none;
   border: none;
-  color: #86868b;
+  color: var(--text-tertiary);
   display: flex;
   flex-direction: column;
   align-items: center;
@@ -299,7 +434,7 @@ input:focus, select:focus {
   height: 10px;
   border-radius: 6px;
   overflow: hidden;
-  background: #ececec;
+  background: var(--track-bg);
 }
 
 .allocation-segment { height: 100%; transition: width 0.3s ease; }
@@ -383,7 +518,7 @@ input:focus, select:focus {
 .btn-excluir-mini {
   background: none;
   border: none;
-  color: #a1a1a6;
+  color: var(--text-tertiary);
   padding: 0 16px;
   display: flex;
   align-items: center;
@@ -421,7 +556,7 @@ input:focus, select:focus {
   color: var(--text);
 }
 
-.expand-icon { color: #a1a1a6; display: flex; align-items: center; padding: 0 4px; }
+.expand-icon { color: var(--text-tertiary); display: flex; align-items: center; padding: 0 4px; }
 
 .subcategorias-lista {
   padding: 4px 12px 12px 24px;
@@ -515,7 +650,7 @@ input:focus, select:focus {
   width: 48px;
   height: 28px;
   border-radius: 999px;
-  background: #d2d2d7;
+  background: var(--hairline-strong);
   position: relative;
   display: inline-block;
   transition: background-color 0.2s ease;
@@ -562,7 +697,7 @@ input:focus, select:focus {
 .orcamento-barra {
   height: 7px;
   border-radius: 5px;
-  background: #ececec;
+  background: var(--track-bg);
   overflow: hidden;
 }
 
@@ -650,7 +785,43 @@ input:focus, select:focus {
 
 .tag-ajustado { border-color: var(--blue); color: var(--blue); }
 
-.entry-fatura { color: #a1a1a6; font-size: 12px; }
+.entry-fatura { color: var(--text-tertiary); font-size: 12px; }
+
+.link-faturas {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  background: none;
+  border: none;
+  color: var(--blue);
+  font-size: 14px;
+  font-weight: 500;
+  padding: 0;
+  margin: -12px 0 20px;
+  cursor: pointer;
+}
+
+.metricas-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 10px;
+  margin-bottom: 8px;
+}
+
+.metrica-card {
+  background: var(--surface);
+  border: 1px solid var(--hairline);
+  border-radius: var(--radius-md);
+  padding: 12px 14px;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+.metrica-card-wide { grid-column: 1 / -1; }
+
+.metrica-label { font-size: 12px; color: var(--text-secondary); }
+.metrica-valor { font-size: 15px; font-weight: 700; }
+.metrica-neutra { color: var(--text); font-weight: 600; font-size: 14px; }
 
 .saldo-contas-lista { display: flex; flex-direction: column; gap: 10px; }
 .saldo-conta-linha { display: flex; justify-content: space-between; align-items: center; font-size: 14.5px; }
@@ -671,6 +842,32 @@ input:focus, select:focus {
 .config-cartao-dias .field { flex-direction: row; align-items: center; justify-content: space-between; }
 .config-cartao-dias .field label { margin: 0; }
 .config-cartao-dias .field input { width: 64px; text-align: center; }
+
+/* ---------- Faturas ---------- */
+.fatura-cartao-bloco { margin-bottom: 8px; }
+.fatura-cartao-bloco h2 { display: flex; align-items: center; gap: 7px; }
+.fatura-lista { display: flex; flex-direction: column; gap: 4px; }
+.fatura-item {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 10px 0;
+}
+.fatura-item:not(:last-child) { border-bottom: 1px solid var(--hairline); }
+.fatura-mes { font-size: 15px; font-weight: 600; }
+.fatura-vencimento { font-size: 12.5px; color: var(--text-secondary); margin-top: 2px; }
+.fatura-direita { display: flex; flex-direction: column; align-items: flex-end; gap: 4px; }
+.fatura-tag {
+  font-size: 10.5px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.03em;
+  padding: 1px 7px;
+  border-radius: 4px;
+}
+.fatura-tag-aberta { background: var(--blue-tint); color: var(--blue); }
+.fatura-tag-futura { background: var(--hairline); color: var(--text-secondary); }
+.fatura-tag-fechada { background: var(--hairline); color: var(--text-tertiary); }
 
 /* ---------- Dados (backup / reset) ---------- */
 .dados-backup-box {

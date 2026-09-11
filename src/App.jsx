@@ -1,5 +1,6 @@
 import { useState, useEffect } from 'react';
-import { iniciarBancoSeVazio } from './db/db';
+import { useLiveQuery } from 'dexie-react-hooks';
+import { iniciarBancoSeVazio, db } from './db/db';
 import { gerarLancamentosPendentes } from './db/recorrencias';
 import { pinEstaAtivo } from './db/security';
 import BottomNav from './components/BottomNav';
@@ -8,11 +9,20 @@ import Resumo from './pages/Resumo';
 import Lancar from './pages/Lancar';
 import Historico from './pages/Historico';
 import Categorias from './pages/Categorias';
+import Perfil from './pages/Perfil';
+import Faturas from './pages/Faturas';
+import { IconUser } from './components/Icons';
 
 export default function App() {
   const [abaAtiva, setAbaAtiva] = useState('resumo');
+  const [mostrandoPerfil, setMostrandoPerfil] = useState(false);
+  const [mostrandoFaturas, setMostrandoFaturas] = useState(false);
   const [pronto, setPronto] = useState(false);
   const [bloqueado, setBloqueado] = useState(false);
+
+  const registroTema = useLiveQuery(() => db.configuracoes.where('chave').equals('tema').first(), []);
+  const registroPerfil = useLiveQuery(() => db.configuracoes.where('chave').equals('perfil').first(), []);
+  const emojiPerfil = registroPerfil ? JSON.parse(registroPerfil.valor).emoji : null;
 
   useEffect(() => {
     async function iniciar() {
@@ -24,6 +34,19 @@ export default function App() {
     iniciar();
   }, []);
 
+  // Aplica o tema escolhido (auto/claro/escuro) na tag <html> — o CSS
+  // reage a esse atributo (ver :root[data-theme] em index.css). 'auto' não
+  // seta o atributo, deixando a preferência do sistema (prefers-color-scheme)
+  // decidir sozinha.
+  useEffect(() => {
+    const tema = registroTema?.valor || 'auto';
+    if (tema === 'auto') {
+      document.documentElement.removeAttribute('data-theme');
+    } else {
+      document.documentElement.setAttribute('data-theme', tema === 'escuro' ? 'dark' : 'light');
+    }
+  }, [registroTema]);
+
   if (!pronto) {
     return <div className="loading-screen">Carregando...</div>;
   }
@@ -32,10 +55,35 @@ export default function App() {
     return <LockScreen onUnlock={() => setBloqueado(false)} />;
   }
 
+  if (mostrandoPerfil) {
+    return (
+      <div className="app">
+        <main className="app-content">
+          <Perfil onVoltar={() => setMostrandoPerfil(false)} />
+        </main>
+      </div>
+    );
+  }
+
+  if (mostrandoFaturas) {
+    return (
+      <div className="app">
+        <main className="app-content">
+          <Faturas onVoltar={() => setMostrandoFaturas(false)} />
+        </main>
+      </div>
+    );
+  }
+
   return (
     <div className="app">
+      <header className="app-header">
+        <button type="button" className="botao-perfil" onClick={() => setMostrandoPerfil(true)}>
+          {emojiPerfil || <IconUser size={19} />}
+        </button>
+      </header>
       <main className="app-content">
-        {abaAtiva === 'resumo' && <Resumo />}
+        {abaAtiva === 'resumo' && <Resumo onAbrirFaturas={() => setMostrandoFaturas(true)} />}
         {abaAtiva === 'lancar' && <Lancar />}
         {abaAtiva === 'historico' && <Historico />}
         {abaAtiva === 'categorias' && <Categorias />}

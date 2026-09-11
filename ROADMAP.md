@@ -3,6 +3,33 @@
 Lista de melhorias discutidas para depois da Fase 1 (MVP), com prioridade.
 Mantido aqui pra não se perder entre conversas.
 
+## Concluído (set/2026) — modo escuro, perfil, faturas e métricas
+
+- [x] **Modo escuro** — `Automático` (padrão, segue `prefers-color-scheme`
+  do sistema), `Claro` ou `Escuro` (força independente do sistema),
+  configurável em Perfil → Preferências. Implementado só com variáveis CSS
+  (`:root[data-theme]` em `src/index.css`) reaproveitando os mesmos nomes já
+  usados em todo o app — nenhum componente precisou saber em que tema está.
+- [x] **Tela de Perfil** (ícone no canto superior direito, fora das abas) —
+  nome + emoji como avatar (perfil local, sem login/foto — login com Google
+  segue adiado pra quando houver servidor). As seções **Contas**,
+  **Segurança** (PIN) e **Dados** (backup/reset), que antes ficavam em
+  Categorias, foram movidas pra cá — Categorias ficou só com a gestão de
+  categorias/subcategorias/orçamento.
+- [x] **Tela de Faturas** (acessível por um link no Resumo, não é aba) —
+  agrupa os gastos de cada cartão por fatura (fechamento/vencimento),
+  mostrando o total e uma tag de status: "Em aberto" (fatura atual),
+  "Prevista" (inclui lançamentos fixos futuros) ou "Fechada". Não tem
+  "marcar como paga" separado — isso já é coberto pelo saldo da conta
+  (pagar a fatura = registrar uma transferência pra ela, que traz o saldo
+  negativo de volta pra perto de zero).
+- [x] **Métricas no Resumo** (dashboard) — visíveis quando um mês
+  específico está selecionado: variação de despesas vs. mês anterior,
+  sequência de meses seguidos com saldo positivo, maior categoria de gasto
+  do mês, maior lançamento individual, % de despesas fixas vs. variáveis
+  (usando `recorrenciaId`), e uma linha de média móvel de despesa dos
+  últimos 3 meses sobreposta ao gráfico de barras do ano.
+
 ## Em andamento (prioridade média — iniciado em set/2026)
 
 - [x] **Lançamentos fixos/recorrentes** — repetição mensal automática
@@ -17,7 +44,7 @@ Mantido aqui pra não se perder entre conversas.
   despesa (configurado em Categorias → categoria expandida), com barra de
   progresso no Resumo (só quando um mês específico está selecionado).
 - [x] **Trava de acesso (PIN)** — código de 4 dígitos, hash local (SHA-256),
-  configurado em Categorias → Segurança. Sem biometria por enquanto (Web
+  configurado em Perfil → Segurança. Sem biometria por enquanto (Web
   Authentication API é mais complexa e instável entre navegadores — avaliar
   se valer a pena depois).
 
@@ -54,13 +81,13 @@ Mantido aqui pra não se perder entre conversas.
 - [x] **Duplicar lançamento** — no Histórico, cada lançamento tem um botão
   de duplicar: cria uma cópia independente (sem herdar recorrência/parcela)
   e já abre em edição pra ajustar data/valor na hora.
-- [x] **Cartão de crédito (dia de fechamento/vencimento)** — em Categorias →
+- [x] **Cartão de crédito (dia de fechamento/vencimento)** — em Perfil →
   Contas, qualquer conta pode ser marcada como cartão, com dia de
   fechamento e de vencimento. O Histórico mostra em qual fatura cada gasto
   cai e quando ela vence (`src/utils/cartao.js`). Só organiza a
   visualização — não controla saldo da fatura nem soma total por cartão
   ainda (ideia pra uma futura tela de "Faturas", ver abaixo).
-- [x] **Backup/exportação dos dados** — em Categorias → Dados: exportar
+- [x] **Backup/exportação dos dados** — em Perfil → Dados: exportar
   baixa um `.json` com categorias, subcategorias, contas, lançamentos,
   recorrências e orçamentos (fica de fora `configuracoes`, que guarda o hash
   do PIN — é config do dispositivo, não dado financeiro). Importar substitui
@@ -95,12 +122,12 @@ Mantido aqui pra não se perder entre conversas.
     a partir do histórico antigo — o usuário informa o valor atual ao
     ativar, e o app soma/subtrai só o que aconteceu a partir dali
     (`saldoInicialData`). Uma conta só passa a ter saldo controlado quando
-    isso é explicitamente ativado em Categorias → Contas; até lá continua
+    isso é explicitamente ativado em Perfil → Contas; até lá continua
     sendo só etiqueta, como sempre foi.
-  - "Recalibrar" (Categorias → Contas → conta expandida) reposiciona a
+  - "Recalibrar" (Perfil → Contas → conta expandida) reposiciona a
     referência pro saldo de hoje de novo, pra quando o saldo calculado não
     bater com a realidade (lançamento esquecido, etc).
-  - Saldo por conta aparece em dois lugares: Categorias → Contas (ao lado
+  - Saldo por conta aparece em dois lugares: Perfil → Contas (ao lado
     do nome) e Resumo (seção "Saldo por conta", sempre "agora" — não
     depende do filtro de ano/mês da tela).
   - Lógica em `src/db/saldos.js`. Nada disso quebra contas que nunca
@@ -116,13 +143,7 @@ Mantido aqui pra não se perder entre conversas.
 
 ## Prioridade baixa (mais pra frente)
 
-- [ ] **Tela de "Faturas"** — hoje o cartão só mostra a fatura em cada linha
-  do Histórico. Uma tela dedicada agrupando por fatura (total da fatura,
-  data de vencimento, marcá-la como paga) ficaria mais completa — natural
-  de fazer junto com "Saldo controlado por conta" da Fase 2.
 - [ ] **Publicar na Google Play** — não precisa reescrever em React Native:
   dá pra empacotar o PWA atual como Trusted Web Activity ou via Capacitor.
-- [ ] **Modo escuro** — alternador de tema, aproveitando os tokens de cor já
-  centralizados no `index.css`.
 - [ ] **Busca no histórico e relatórios exportáveis** — busca por texto nos
   lançamentos; exportar o resumo mensal como PDF/imagem.

@@ -112,3 +112,29 @@ export function IconCard({ size = 18 }) {
     </svg>
   );
 }
+
+export function IconUser({ size = 20 }) {
+  return (
+    <svg width={size} height={size} {...base} strokeWidth={1.6}>
+      <circle cx="12" cy="8.5" r="3.5" />
+      <path d="M5 20c0-3.6 3.1-6.5 7-6.5s7 2.9 7 6.5" />
+    </svg>
+  );
+}
+
+export function IconArrowLeft({ size = 20 }) {
+  return (
+    <svg width={size} height={size} {...base} strokeWidth={1.8}>
+      <path d="M19 12H5M11 6l-6 6 6 6" />
+    </svg>
+  );
+}
+
+export function IconFile({ size = 18 }) {
+  return (
+    <svg width={size} height={size} {...base} strokeWidth={1.6}>
+      <path d="M7 3.5h7l4 4V19a1.5 1.5 0 0 1-1.5 1.5h-9A1.5 1.5 0 0 1 6 19V5A1.5 1.5 0 0 1 7 3.5Z" />
+      <path d="M14 3.5V8h4" />
+    </svg>
+  );
+}
