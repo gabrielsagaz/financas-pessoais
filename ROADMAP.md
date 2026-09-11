@@ -19,10 +19,13 @@ Mantido aqui pra não se perder entre conversas.
 - [x] **Tela de Faturas** (acessível por um link no Resumo, não é aba) —
   agrupa os gastos de cada cartão por fatura (fechamento/vencimento),
   mostrando o total e uma tag de status: "Em aberto" (fatura atual),
-  "Prevista" (inclui lançamentos fixos futuros) ou "Fechada". Não tem
-  "marcar como paga" separado — isso já é coberto pelo saldo da conta
-  (pagar a fatura = registrar uma transferência pra ela, que traz o saldo
-  negativo de volta pra perto de zero).
+  "Prevista" (inclui lançamentos fixos futuros) ou "Fechada". Botão
+  **Pagar** por fatura: escolhe a conta de origem e o valor (pré-preenchido
+  com o restante), e registra uma transferência pra o cartão marcada com
+  `pagamentoFaturaChave` — é isso que faz o saldo negativo do cartão voltar
+  pra perto de zero. Botão **Retirar pagamento** desfaz — remove a(s)
+  transferência(s) marcadas daquela fatura. Fatura mostra "Paga" (tudo
+  pago) ou "Pago X de Y" (parcial).
 - [x] **Métricas no Resumo** (dashboard) — visíveis quando um mês
   específico está selecionado: variação de despesas vs. mês anterior,
   sequência de meses seguidos com saldo positivo, maior categoria de gasto

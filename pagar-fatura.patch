@@ -1,0 +1,304 @@
+diff --git a/ROADMAP.md b/ROADMAP.md
+index 8c060ca..df852e9 100644
+--- a/ROADMAP.md
++++ b/ROADMAP.md
+@@ -19,10 +19,13 @@ Mantido aqui pra não se perder entre conversas.
+ - [x] **Tela de Faturas** (acessível por um link no Resumo, não é aba) —
+   agrupa os gastos de cada cartão por fatura (fechamento/vencimento),
+   mostrando o total e uma tag de status: "Em aberto" (fatura atual),
+-  "Prevista" (inclui lançamentos fixos futuros) ou "Fechada". Não tem
+-  "marcar como paga" separado — isso já é coberto pelo saldo da conta
+-  (pagar a fatura = registrar uma transferência pra ela, que traz o saldo
+-  negativo de volta pra perto de zero).
++  "Prevista" (inclui lançamentos fixos futuros) ou "Fechada". Botão
++  **Pagar** por fatura: escolhe a conta de origem e o valor (pré-preenchido
++  com o restante), e registra uma transferência pra o cartão marcada com
++  `pagamentoFaturaChave` — é isso que faz o saldo negativo do cartão voltar
++  pra perto de zero. Botão **Retirar pagamento** desfaz — remove a(s)
++  transferência(s) marcadas daquela fatura. Fatura mostra "Paga" (tudo
++  pago) ou "Pago X de Y" (parcial).
+ - [x] **Métricas no Resumo** (dashboard) — visíveis quando um mês
+   específico está selecionado: variação de despesas vs. mês anterior,
+   sequência de meses seguidos com saldo positivo, maior categoria de gasto
+diff --git a/src/index.css b/src/index.css
+index 56044bb..6002948 100644
+--- a/src/index.css
++++ b/src/index.css
+@@ -847,13 +847,13 @@ input:focus, select:focus {
+ .fatura-cartao-bloco { margin-bottom: 8px; }
+ .fatura-cartao-bloco h2 { display: flex; align-items: center; gap: 7px; }
+ .fatura-lista { display: flex; flex-direction: column; gap: 4px; }
++.fatura-item-bloco { padding: 10px 0; }
++.fatura-item-bloco:not(:last-child) { border-bottom: 1px solid var(--hairline); }
+ .fatura-item {
+   display: flex;
+   justify-content: space-between;
+   align-items: center;
+-  padding: 10px 0;
+ }
+-.fatura-item:not(:last-child) { border-bottom: 1px solid var(--hairline); }
+ .fatura-mes { font-size: 15px; font-weight: 600; }
+ .fatura-vencimento { font-size: 12.5px; color: var(--text-secondary); margin-top: 2px; }
+ .fatura-direita { display: flex; flex-direction: column; align-items: flex-end; gap: 4px; }
+@@ -868,6 +868,31 @@ input:focus, select:focus {
+ .fatura-tag-aberta { background: var(--blue-tint); color: var(--blue); }
+ .fatura-tag-futura { background: var(--hairline); color: var(--text-secondary); }
+ .fatura-tag-fechada { background: var(--hairline); color: var(--text-tertiary); }
++.fatura-tag-paga { background: rgba(28, 138, 75, 0.14); color: var(--green); }
++.fatura-tag-parcial { background: rgba(255, 159, 10, 0.16); color: #ff9f0a; }
++
++.fatura-pagamento-linha {
++  display: flex;
++  justify-content: space-between;
++  align-items: center;
++  margin-top: 10px;
++  gap: 8px;
++}
++.fatura-pagamento-botoes { display: flex; gap: 8px; margin-left: auto; }
++.fatura-pagamento-botoes .btn-confirm,
++.fatura-pagamento-botoes .btn-cancel {
++  padding: 6px 12px;
++  font-size: 13px;
++}
++
++.fatura-pagar-form {
++  margin-top: 12px;
++  padding-top: 12px;
++  border-top: 1px solid var(--hairline);
++  display: flex;
++  flex-direction: column;
++  gap: 12px;
++}
+ 
+ /* ---------- Dados (backup / reset) ---------- */
+ .dados-backup-box {
+diff --git a/src/pages/Faturas.jsx b/src/pages/Faturas.jsx
+index fe6bc3d..784cc53 100644
+--- a/src/pages/Faturas.jsx
++++ b/src/pages/Faturas.jsx
+@@ -1,10 +1,12 @@
+-import { useMemo } from 'react';
++import { useState, useMemo } from 'react';
+ import { useLiveQuery } from 'dexie-react-hooks';
+ import { db } from '../db/db';
+ import { formatCurrency, formatDateBR, hojeISO, NOMES_MESES } from '../utils/format';
+ import { calcularFaturaDoLancamento, contaEhCartao } from '../utils/cartao';
+ import { projetarTodasAsRecorrencias } from '../db/recorrencias';
+ import { IconArrowLeft, IconCard } from '../components/Icons';
++import MoneyInput from '../components/MoneyInput';
++import ConfirmDialog from '../components/ConfirmDialog';
+ 
+ export default function Faturas({ onVoltar }) {
+   const contas = useLiveQuery(() => db.contas.orderBy('ordem').toArray(), []) || [];
+@@ -13,6 +15,9 @@ export default function Faturas({ onVoltar }) {
+   const excecoesValor = useLiveQuery(() => db.excecoesValor.toArray(), []) || [];
+ 
+   const cartoes = useMemo(() => contas.filter(contaEhCartao), [contas]);
++  // Pagar a fatura sempre parte de uma conta que NÃO é cartão (não faz
++  // sentido "pagar o cartão com o próprio cartão").
++  const contasParaPagar = useMemo(() => contas.filter((c) => !contaEhCartao(c)), [contas]);
+ 
+   // Projeta os lançamentos fixos dos próximos ~12 meses, pra faturas futuras
+   // de compras já comprometidas (assinaturas, parcelas) aparecerem também,
+@@ -34,13 +39,21 @@ export default function Faturas({ onVoltar }) {
+       {cartoes.length === 0 ? (
+         <p className="vazio">Nenhuma conta marcada como cartão de crédito ainda. Configure em Perfil → Contas.</p>
+       ) : (
+-        cartoes.map((cartao) => <FaturasDoCartao key={cartao.id} cartao={cartao} entradas={todasEntradas} />)
++        cartoes.map((cartao) => (
++          <FaturasDoCartao
++            key={cartao.id}
++            cartao={cartao}
++            entradas={todasEntradas}
++            entradasReais={entradas}
++            contasParaPagar={contasParaPagar}
++          />
++        ))
+       )}
+     </div>
+   );
+ }
+ 
+-function FaturasDoCartao({ cartao, entradas }) {
++function FaturasDoCartao({ cartao, entradas, entradasReais, contasParaPagar }) {
+   const faturaAtualChave = useMemo(() => {
+     const { anoFatura, mesFatura } = calcularFaturaDoLancamento(hojeISO(), cartao.diaFechamento, cartao.diaVencimento);
+     return `${anoFatura}-${String(mesFatura).padStart(2, '0')}`;
+@@ -52,12 +65,27 @@ function FaturasDoCartao({ cartao, entradas }) {
+     for (const e of doCartao) {
+       const { anoFatura, mesFatura, dataVencimento } = calcularFaturaDoLancamento(e.data, cartao.diaFechamento, cartao.diaVencimento);
+       const chave = `${anoFatura}-${String(mesFatura).padStart(2, '0')}`;
+-      if (!grupos[chave]) grupos[chave] = { chave, anoFatura, mesFatura, dataVencimento, total: 0, temPrevisto: false };
++      if (!grupos[chave]) grupos[chave] = { chave, anoFatura, mesFatura, dataVencimento, total: 0, temPrevisto: false, pago: 0 };
+       grupos[chave].total += e.valor;
+       if (e.previsto) grupos[chave].temPrevisto = true;
+     }
++
++    // Pagamentos: transferências reais marcadas como pagamento desta fatura
++    // (ver `pagamentoFaturaChave`, gravado ao clicar em "Pagar" abaixo).
++    const pagamentos = entradasReais.filter(
++      (e) => e.tipo === 'transferencia' && e.contaDestinoId === cartao.id && e.pagamentoFaturaChave
++    );
++    for (const p of pagamentos) {
++      const chave = p.pagamentoFaturaChave;
++      if (!grupos[chave]) {
++        const [anoStr, mesStr] = chave.split('-');
++        grupos[chave] = { chave, anoFatura: Number(anoStr), mesFatura: Number(mesStr), dataVencimento: null, total: 0, temPrevisto: false, pago: 0 };
++      }
++      grupos[chave].pago += p.valor;
++    }
++
+     return Object.values(grupos).sort((a, b) => (a.chave < b.chave ? -1 : 1));
+-  }, [entradas, cartao]);
++  }, [entradas, entradasReais, cartao]);
+ 
+   return (
+     <div className="fatura-cartao-bloco">
+@@ -66,24 +94,131 @@ function FaturasDoCartao({ cartao, entradas }) {
+         <p className="vazio">Nenhum gasto neste cartão ainda.</p>
+       ) : (
+         <div className="chart-box fatura-lista">
+-          {faturas.map((f) => {
+-            const status = f.chave === faturaAtualChave ? 'aberta' : f.temPrevisto ? 'futura' : 'fechada';
+-            const rotulo = status === 'aberta' ? 'Em aberto' : status === 'futura' ? 'Prevista' : 'Fechada';
+-            return (
+-              <div key={f.chave} className="fatura-item">
+-                <div>
+-                  <div className="fatura-mes">{NOMES_MESES[f.mesFatura - 1]} {f.anoFatura}</div>
+-                  <div className="fatura-vencimento">Vence {formatDateBR(f.dataVencimento)}</div>
+-                </div>
+-                <div className="fatura-direita">
+-                  <span className={`fatura-tag fatura-tag-${status}`}>{rotulo}</span>
+-                  <strong>{formatCurrency(f.total)}</strong>
+-                </div>
+-              </div>
+-            );
+-          })}
++          {faturas.map((f) => (
++            <FaturaItem
++              key={f.chave}
++              fatura={f}
++              cartao={cartao}
++              faturaAtualChave={faturaAtualChave}
++              contasParaPagar={contasParaPagar}
++            />
++          ))}
++        </div>
++      )}
++    </div>
++  );
++}
++
++function FaturaItem({ fatura: f, cartao, faturaAtualChave, contasParaPagar }) {
++  const [pagando, setPagando] = useState(false);
++  const [contaOrigemId, setContaOrigemId] = useState(contasParaPagar[0]?.id ?? null);
++  const [valorPagamento, setValorPagamento] = useState(Math.max(0, f.total - f.pago));
++  const [confirmandoRetirar, setConfirmandoRetirar] = useState(false);
++
++  const restante = Math.max(0, f.total - f.pago);
++  const estaPaga = f.total > 0 && f.pago >= f.total;
++
++  const status = f.chave === faturaAtualChave ? 'aberta' : f.temPrevisto ? 'futura' : 'fechada';
++  const rotulo = status === 'aberta' ? 'Em aberto' : status === 'futura' ? 'Prevista' : 'Fechada';
++
++  function abrirPagamento() {
++    setValorPagamento(restante);
++    setContaOrigemId((id) => id ?? contasParaPagar[0]?.id ?? null);
++    setPagando(true);
++  }
++
++  async function confirmarPagamento() {
++    if (!contaOrigemId || valorPagamento <= 0) return;
++    await db.entries.add({
++      tipo: 'transferencia',
++      valor: valorPagamento,
++      data: hojeISO(),
++      categoriaId: null,
++      subcategoriaId: null,
++      contaId: contaOrigemId,
++      contaDestinoId: cartao.id,
++      nota: `Pagamento fatura ${NOMES_MESES[f.mesFatura - 1]}/${f.anoFatura}`,
++      pagamentoFaturaChave: f.chave,
++      origem: 'manual',
++      externalId: null,
++      recorrenciaId: null,
++      criadoEm: new Date().toISOString()
++    });
++    setPagando(false);
++  }
++
++  // Remove TODAS as transferências marcadas como pagamento desta fatura —
++  // desfaz o pagamento por completo (se houve mais de um pagamento parcial,
++  // os dois somem juntos; simples de propósito, dá pra pagar de novo na hora).
++  // Filtra por `tipo` (indexado) e depois em JS — `contaDestinoId` e
++  // `pagamentoFaturaChave` não são campos indexados no banco.
++  async function retirarPagamento() {
++    const alvos = await db.entries
++      .where('tipo').equals('transferencia')
++      .filter((e) => e.contaDestinoId === cartao.id && e.pagamentoFaturaChave === f.chave)
++      .toArray();
++    await db.entries.bulkDelete(alvos.map((e) => e.id));
++    setConfirmandoRetirar(false);
++  }
++
++  return (
++    <div className="fatura-item-bloco">
++      <div className="fatura-item">
++        <div>
++          <div className="fatura-mes">{NOMES_MESES[f.mesFatura - 1]} {f.anoFatura}</div>
++          {f.dataVencimento && <div className="fatura-vencimento">Vence {formatDateBR(f.dataVencimento)}</div>}
++        </div>
++        <div className="fatura-direita">
++          <span className={`fatura-tag fatura-tag-${status}`}>{rotulo}</span>
++          <strong>{formatCurrency(f.total)}</strong>
++        </div>
++      </div>
++
++      <div className="fatura-pagamento-linha">
++        {f.pago > 0 && (
++          <span className={`fatura-tag ${estaPaga ? 'fatura-tag-paga' : 'fatura-tag-parcial'}`}>
++            {estaPaga ? 'Paga' : `Pago ${formatCurrency(f.pago)} de ${formatCurrency(f.total)}`}
++          </span>
++        )}
++        <div className="fatura-pagamento-botoes">
++          {!estaPaga && (
++            <button type="button" className="btn-confirm" onClick={abrirPagamento}>Pagar</button>
++          )}
++          {f.pago > 0 && (
++            <button type="button" className="btn-cancel" onClick={() => setConfirmandoRetirar(true)}>
++              Retirar pagamento
++            </button>
++          )}
++        </div>
++      </div>
++
++      {pagando && (
++        <div className="fatura-pagar-form">
++          <div className="field">
++            <label>Pagar com</label>
++            <select value={contaOrigemId ?? ''} onChange={(e) => setContaOrigemId(e.target.value ? Number(e.target.value) : null)}>
++              <option value="">Selecione a conta</option>
++              {contasParaPagar.map((c) => <option key={c.id} value={c.id}>{c.nome}</option>)}
++            </select>
++          </div>
++          <div className="field">
++            <label>Valor</label>
++            <MoneyInput value={valorPagamento} onChange={setValorPagamento} />
++          </div>
++          <div className="edit-actions">
++            <button type="button" className="btn-cancel" onClick={() => setPagando(false)}>Cancelar</button>
++            <button type="button" className="btn-primary" onClick={confirmarPagamento}>Confirmar pagamento</button>
++          </div>
+         </div>
+       )}
++
++      <ConfirmDialog
++        open={confirmandoRetirar}
++        title="Retirar pagamento?"
++        message="Isso exclui a transferência registrada como pagamento desta fatura — o saldo do cartão volta a refletir a dívida."
++        onConfirm={retirarPagamento}
++        onCancel={() => setConfirmandoRetirar(false)}
++      />
+     </div>
+   );
+ }
