@@ -303,6 +303,33 @@ h2 {
   z-index: 10;
 }
 
+.toast {
+  position: fixed;
+  left: 50%;
+  bottom: calc(96px + env(safe-area-inset-bottom));
+  transform: translateX(-50%);
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 12px 18px;
+  border-radius: var(--radius-pill);
+  background: var(--text);
+  color: var(--surface);
+  font-size: 14px;
+  font-weight: 600;
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.18);
+  z-index: 20;
+  max-width: calc(100vw - 48px);
+  animation: toast-entrar 0.25s ease;
+}
+.toast-erro { background: var(--red); color: #fff; }
+.toast svg { flex-shrink: 0; }
+
+@keyframes toast-entrar {
+  from { opacity: 0; transform: translateX(-50%) translateY(8px); }
+  to { opacity: 1; transform: translateX(-50%) translateY(0); }
+}
+
 .nav-item {
   flex: 1;
   background: none;

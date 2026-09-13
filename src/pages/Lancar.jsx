@@ -7,6 +7,7 @@ import { criarRecorrencia, alternarRecorrencia, excluirRecorrencia } from '../db
 import MoneyInput from '../components/MoneyInput';
 import EditableSelect from '../components/EditableSelect';
 import ConfirmDialog from '../components/ConfirmDialog';
+import Toast from '../components/Toast';
 import { IconRepeat, IconTrash } from '../components/Icons';
 
 const TIPO_INICIAL = 'despesa';
@@ -24,7 +25,8 @@ export default function Lancar() {
   const [modoRepeticao, setModoRepeticao] = useState('infinito'); // 'infinito' | 'parcelas'
   const [totalParcelas, setTotalParcelas] = useState('3');
   const [salvando, setSalvando] = useState(false);
-  const [mensagem, setMensagem] = useState('');
+  const [erro, setErro] = useState(''); // validação — fica inline, junto do formulário
+  const [toast, setToast] = useState(''); // confirmação de sucesso — flutuante, some sozinha
   const [excluindoRecId, setExcluindoRecId] = useState(null);
 
   const ehTransferencia = tipo === 'transferencia';
@@ -57,7 +59,7 @@ export default function Lancar() {
     setSubcategoriaId(null);
     setContaDestinoId(null);
     setRepetir(false);
-    setMensagem('');
+    setErro('');
   }
 
   function mudarCategoria(id) {
@@ -93,22 +95,23 @@ export default function Lancar() {
 
   async function salvar(e) {
     e.preventDefault();
+    setErro('');
     if (valor <= 0) {
-      setMensagem('Informe um valor maior que zero.');
+      setErro('Informe um valor maior que zero.');
       return;
     }
     if (ehTransferencia) {
       if (!contaId || !contaDestinoId) {
-        setMensagem('Selecione a conta de origem e a de destino.');
+        setErro('Selecione a conta de origem e a de destino.');
         return;
       }
       if (contaId === contaDestinoId) {
-        setMensagem('Escolha duas contas diferentes.');
+        setErro('Escolha duas contas diferentes.');
         return;
       }
     }
     if (repetir && modoRepeticao === 'parcelas' && (!totalParcelas || Number(totalParcelas) < 2)) {
-      setMensagem('Informe um número de vezes a partir de 2.');
+      setErro('Informe um número de vezes a partir de 2.');
       return;
     }
 
@@ -129,7 +132,7 @@ export default function Lancar() {
           recorrenciaId: null,
           criadoEm: new Date().toISOString()
         });
-        setMensagem('Transferência registrada ✓');
+        setToast('Transferência registrada ✓');
       } else if (repetir) {
         const parcelas = modoRepeticao === 'parcelas' ? Number(totalParcelas) : null;
         await criarRecorrencia({
@@ -142,7 +145,7 @@ export default function Lancar() {
           dataInicio: data,
           totalParcelas: parcelas
         });
-        setMensagem(parcelas ? `Lançamento parcelado criado ✓ — 1/${parcelas}` : 'Lançamento fixo criado ✓ — vai repetir todo mês');
+        setToast(parcelas ? `Lançamento parcelado criado ✓ — 1/${parcelas}` : 'Lançamento fixo criado ✓ — vai repetir todo mês');
       } else {
         await db.entries.add({
           tipo,
@@ -157,7 +160,7 @@ export default function Lancar() {
           recorrenciaId: null,
           criadoEm: new Date().toISOString()
         });
-        setMensagem('Lançamento salvo ✓');
+        setToast('Lançamento salvo ✓');
       }
       limparFormulario();
     } finally {
@@ -312,7 +315,7 @@ export default function Lancar() {
           </>
         )}
 
-        {mensagem && <p className="mensagem">{mensagem}</p>}
+        {erro && <p className="mensagem erro">{erro}</p>}
 
         <button type="submit" className="btn-primary" disabled={salvando}>
           {salvando ? 'Salvando...' : 'Salvar lançamento'}
@@ -344,6 +347,8 @@ export default function Lancar() {
         onConfirm={async () => { await excluirRecorrencia(excluindoRecId); setExcluindoRecId(null); }}
         onCancel={() => setExcluindoRecId(null)}
       />
+
+      <Toast mensagem={toast} onFechar={() => setToast('')} />
     </div>
   );
 }

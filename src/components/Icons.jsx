@@ -11,6 +11,14 @@ const base = {
   strokeLinejoin: 'round'
 };
 
+export function IconCheck({ size = 22 }) {
+  return (
+    <svg width={size} height={size} {...base}>
+      <path d="M4 12.5l5 5L20 6.5" />
+    </svg>
+  );
+}
+
 export function IconResumo({ size = 22, filled = false }) {
   return (
     <svg width={size} height={size} {...base} fill={filled ? 'currentColor' : 'none'}>
