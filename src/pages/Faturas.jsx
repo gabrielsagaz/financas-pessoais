@@ -1,5 +1,5 @@
 import { useState, useMemo } from 'react';
-import { useLiveQuery } from 'dexie-react-hooks';
+import { useLiveQuery } from '../db/useLiveQuery';
 import { db } from '../db/db';
 import { formatCurrency, formatDateBR, hojeISO, NOMES_MESES } from '../utils/format';
 import { calcularFaturaDoLancamento, contaEhCartao } from '../utils/cartao';

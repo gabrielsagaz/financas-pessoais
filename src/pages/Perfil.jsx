@@ -1,5 +1,5 @@
 import { useState, useRef, useMemo, useEffect } from 'react';
-import { useLiveQuery } from 'dexie-react-hooks';
+import { useLiveQuery } from '../db/useLiveQuery';
 import { db } from '../db/db';
 import ConfirmDialog from '../components/ConfirmDialog';
 import { IconTrash, IconChevron, IconCard, IconArrowLeft } from '../components/Icons';
@@ -11,6 +11,7 @@ import { contaEhCartao } from '../utils/cartao';
 import { contaTemSaldoControlado, calcularSaldoConta } from '../db/saldos';
 import { formatCurrency, formatDateBR, hojeISO } from '../utils/format';
 import { salvarPerfil, salvarTema, perfilPadrao } from '../db/preferencias';
+import { useAuth } from '../firebase/authContext';
 
 const EMOJIS_AVATAR = ['🙂', '😎', '🧑', '👩', '👨', '🐱', '🐶', '🦊', '🐼', '🌟', '💰', '📈'];
 
@@ -23,6 +24,9 @@ export default function Perfil({ onVoltar }) {
       <h1>Perfil</h1>
 
       <MeuPerfil />
+
+      <h2 style={{ marginTop: 32 }}>Conta</h2>
+      <ContaGoogle />
 
       <h2 style={{ marginTop: 32 }}>Preferências</h2>
       <PreferenciaTema />
@@ -39,8 +43,33 @@ export default function Perfil({ onVoltar }) {
   );
 }
 
-// Perfil local simples — nome + emoji como avatar. Sem foto/upload e sem
-// login (login com Google fica pra Fase 2, quando houver servidor).
+// E-mail da conta Google logada (identidade de verdade, usada pra
+// sincronizar entre dispositivos) + botão de sair. Nome/emoji abaixo
+// continuam sendo só personalização visual, independentes disso.
+function ContaGoogle() {
+  const { usuario, sair } = useAuth();
+
+  function confirmarSaida() {
+    if (window.confirm('Sair da conta? Você precisa entrar de novo com o Google pra acessar seus dados neste dispositivo.')) {
+      sair();
+    }
+  }
+
+  return (
+    <div className="seguranca-box">
+      <div className="seguranca-status">
+        <span>Conta Google</span>
+        <strong>{usuario?.email}</strong>
+      </div>
+      <button type="button" className="btn-cancel" onClick={confirmarSaida}>
+        Sair da conta
+      </button>
+    </div>
+  );
+}
+
+// Perfil local — nome + emoji como avatar, independente da conta Google
+// (é só personalização visual do app, não a identidade usada pro login).
 function MeuPerfil() {
   const registro = useLiveQuery(() => db.configuracoes.where('chave').equals('perfil').first(), []);
   const perfil = useMemo(() => (registro ? JSON.parse(registro.valor) : perfilPadrao()), [registro]);

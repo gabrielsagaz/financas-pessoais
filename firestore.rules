@@ -1,0 +1,18 @@
+rules_version = '2';
+
+// ---------------------------------------------------------------------------
+// Cada usuário só pode ler/escrever dentro de /usuarios/{uid}/**, e só se o
+// {uid} do caminho for igual ao uid da sua própria sessão autenticada. Isso
+// é o que de fato protege os dados — não o sigilo das chaves do firebaseConfig
+// (que são públicas por natureza, ver .env.example).
+//
+// Como aplicar: console.firebase.google.com → seu projeto → Firestore
+// Database → aba "Regras" → colar este conteúdo → Publicar.
+// ---------------------------------------------------------------------------
+service cloud.firestore {
+  match /databases/{database}/documents {
+    match /usuarios/{uid}/{colecao}/{docId} {
+      allow read, write: if request.auth != null && request.auth.uid == uid;
+    }
+  }
+}

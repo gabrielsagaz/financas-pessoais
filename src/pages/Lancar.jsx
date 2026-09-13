@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { useLiveQuery } from 'dexie-react-hooks';
+import { useLiveQuery } from '../db/useLiveQuery';
 import { db } from '../db/db';
 import { TIPOS, TIPOS_TODOS } from '../db/defaultData';
 import { hojeISO, formatCurrency } from '../utils/format';

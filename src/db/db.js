@@ -1,80 +1,65 @@
-import Dexie from 'dexie';
+import { criarTabela } from './firestoreTabela';
 import { CATEGORIAS_PADRAO, CONTAS_PADRAO } from './defaultData';
 import { RECEITAS_HISTORICO, DESPESAS_HISTORICO, INVESTIMENTOS_HISTORICO } from './seedHistorico';
 
 // ---------------------------------------------------------------------------
-// Esquema do banco local (IndexedDB via Dexie).
+// Camada de dados — agora sobre Firestore (era Dexie/IndexedDB).
 //
-// Decisões pensando na Fase 2 (migração para app nativo com saldo controlado
-// por conta e importação automática do PicPay) — registradas também na
-// memória do projeto:
+// Cada usuário tem seus próprios dados em /usuarios/{uid}/<tabela>/<id> (o
+// uid vem do login com Google — ver src/firebase/authContext.jsx e
+// src/db/uid.js). `db.<tabela>` continua com a mesma "forma" de antes
+// (toArray, add, where().equals(), etc.) através do shim em
+// firestoreTabela.js, então as páginas não precisaram ser reescritas.
+//
+// Decisões de modelagem mantidas da Fase 1/2 (ainda válidas):
 //   - `entries.valor` é sempre POSITIVO; o sinal é implícito pelo `tipo`
-//     ('receita' | 'despesa' | 'investimento'). Isso facilita o cálculo de
-//     saldo por conta na Fase 2 (soma receitas, subtrai despesas e
-//     investimentos que saem da conta).
+//     ('receita' | 'despesa' | 'investimento' | 'transferencia').
 //   - `entries.origem` guarda 'manual' ou 'picpay' — hoje só existe 'manual',
-//     mas o campo já existe para quando a importação automática chegar.
-//   - `entries.externalId` fica pronto para guardar o ID da transação vinda
+//     mas o campo já existe para quando a importação automática chegar (via
+//     Cloud Function, escrevendo direto nessas mesmas coleções).
+//   - `entries.externalId` fica pronto pra guardar o ID da transação vinda
 //     do PicPay (evita duplicar lançamentos importados). Hoje é sempre null.
-//   - Contas (`accounts`) são só etiquetas informativas nesta fase — não têm
-//     saldo. Na Fase 2, dá pra adicionar um campo `saldoInicial` sem quebrar
-//     nada do que já existe.
+//   - Contas (`contas`) só têm saldo controlado se isso for explicitamente
+//     ativado por conta (`saldoInicial`/`saldoInicialData`) — sem isso,
+//     continuam sendo só etiquetas informativas.
+//   - `recorrencias`, `orcamentos`, `configuracoes` e `excecoesValor` têm o
+//     mesmo papel de antes — só mudou onde os dados moram.
 //
-// v2 adiciona:
-//   - `recorrencias`: definição de um lançamento fixo mensal (valor,
-//     categoria, conta, dia do mês). `entries.recorrenciaId` liga cada
-//     lançamento gerado de volta à recorrência que o originou — sem isso não
-//     dá pra saber quais lançamentos são "fixos" nem evitar duplicá-los.
-//     `totalParcelas` é opcional: null = repete pra sempre; um número (ex:
-//     3) = compra parcelada, e a recorrência se desativa sozinha depois da
-//     última parcela. `entries.numeroParcela` guarda a posição da parcela
-//     (1, 2, 3...) só quando `totalParcelas` está definido.
-//   - `orcamentos`: limite mensal opcional por categoria (hoje pensado pra
-//     despesas). `&categoriaId` = índice único, então cada categoria tem no
-//     máximo um orçamento.
-//   - `configuracoes`: par chave/valor genérico — hoje guarda só o hash do
-//     PIN de acesso, mas serve pra qualquer configuração futura sem precisar
-//     de mais uma tabela.
+// O que MUDA de propósito em relação ao Dexie:
+//   - Os `id` agora são o ID do documento no Firestore (string), não mais um
+//     auto-incremento numérico. Nada no código fazia conta com esses ids
+//     (só comparação de igualdade), então isso não quebra nada — mas é
+//     importante saber ao ler/depurar dados direto no console do Firebase.
+//   - `db.transaction(...)` continua existindo pra não obrigar a reescrever
+//     backup.js, mas NÃO é mais atômico de verdade (ver função abaixo) —
+//     limitação aceita conscientemente pro tamanho deste projeto pessoal.
 // ---------------------------------------------------------------------------
 
-export const db = new Dexie('financas-pessoais');
+export const db = {
+  categorias: criarTabela('categorias'),
+  subcategorias: criarTabela('subcategorias'),
+  contas: criarTabela('contas'),
+  entries: criarTabela('entries'),
+  recorrencias: criarTabela('recorrencias'),
+  orcamentos: criarTabela('orcamentos'),
+  configuracoes: criarTabela('configuracoes'),
+  excecoesValor: criarTabela('excecoesValor'),
 
-db.version(1).stores({
-  categorias: '++id, tipo, ordem',
-  subcategorias: '++id, categoriaId, ordem',
-  contas: '++id, ordem',
-  entries: '++id, tipo, data, categoriaId, subcategoriaId, contaId, [tipo+data]'
-});
+  // Best-effort, NÃO atômico: o Dexie garantia que, se algo no meio falhasse,
+  // nada era salvo. O Firestore não oferece isso pra sequências arbitrárias
+  // de escritas como estas (só pra grupos pequenos e bem definidos via
+  // runTransaction/writeBatch). Pra uso pessoal, o risco real é baixo — na
+  // pior hipótese (queda de conexão no meio de um restore de backup, por
+  // exemplo), o processo pode ficar parcialmente aplicado, e repetir a ação
+  // resolve. Se algum dia isso importar mais (multiusuário, por exemplo),
+  // vale revisitar com runTransaction em operações menores.
+  async transaction(_modo, ...args) {
+    const callback = args[args.length - 1];
+    return callback();
+  }
+};
 
-// v2 — Fase 2 (parte 1): lançamentos fixos/recorrentes, orçamento por
-// categoria e um armazém de configurações simples (usado hoje pelo PIN de
-// acesso). Só ADICIONA tabelas/índice — dados existentes não são tocados.
-db.version(2).stores({
-  categorias: '++id, tipo, ordem',
-  subcategorias: '++id, categoriaId, ordem',
-  contas: '++id, ordem',
-  entries: '++id, tipo, data, categoriaId, subcategoriaId, contaId, recorrenciaId, [tipo+data]',
-  recorrencias: '++id, tipo',
-  orcamentos: '++id, &categoriaId',
-  configuracoes: '++id, &chave'
-});
-
-// v3 — permite ajustar o valor de UMA ocorrência futura específica (ex:
-// conta de luz que varia todo mês) sem mudar o valor padrão da recorrência
-// nem afetar os outros meses. Cada linha é "recorrência X + mês Y = valor
-// Z"; consumida (removida) quando aquele mês vira um lançamento real.
-db.version(3).stores({
-  categorias: '++id, tipo, ordem',
-  subcategorias: '++id, categoriaId, ordem',
-  contas: '++id, ordem',
-  entries: '++id, tipo, data, categoriaId, subcategoriaId, contaId, recorrenciaId, [tipo+data]',
-  recorrencias: '++id, tipo',
-  orcamentos: '++id, &categoriaId',
-  configuracoes: '++id, &chave',
-  excecoesValor: '++id, recorrenciaId'
-});
-
-// -------------------------- Seed inicial (1x) -------------------------------
+// -------------------------- Seed inicial (1x por usuário) ------------------
 
 async function jaTemDados() {
   const totalCategorias = await db.categorias.count();
@@ -108,12 +93,12 @@ async function seedCategoriasEContas() {
 
 async function buscarSubcategoriaId(categoriaId, nomeSubcategoria) {
   if (!nomeSubcategoria) return null;
-  const sub = await db.subcategorias
+  const registro = await db.subcategorias
     .where('categoriaId')
     .equals(categoriaId)
     .and((s) => s.nome === nomeSubcategoria)
     .first();
-  return sub ? sub.id : null;
+  return registro ? registro.id : null;
 }
 
 async function seedHistorico(tipo, lista, categoriaIdPorTipoNome, contaIdPorNome) {
@@ -139,14 +124,16 @@ async function seedHistorico(tipo, lista, categoriaIdPorTipoNome, contaIdPorNome
   }
 }
 
+// Só semeia categorias/contas/histórico de exemplo se a conta do Firestore
+// estiver mesmo vazia (usuário novo, primeiro login). Se você já migrou seus
+// dados reais do Dexie antigo (ver src/db/migrarDexieParaFirestore.js), essa
+// função não faz nada — `jaTemDados()` já vai encontrar suas categorias.
 export async function iniciarBancoSeVazio() {
   const existeAlgo = await jaTemDados();
   if (existeAlgo) return;
 
-  await db.transaction('rw', db.categorias, db.subcategorias, db.contas, db.entries, async () => {
-    const { contaIdPorNome, categoriaIdPorTipoNome } = await seedCategoriasEContas();
-    await seedHistorico('receita', RECEITAS_HISTORICO, categoriaIdPorTipoNome, contaIdPorNome);
-    await seedHistorico('despesa', DESPESAS_HISTORICO, categoriaIdPorTipoNome, contaIdPorNome);
-    await seedHistorico('investimento', INVESTIMENTOS_HISTORICO, categoriaIdPorTipoNome, contaIdPorNome);
-  });
+  const { contaIdPorNome, categoriaIdPorTipoNome } = await seedCategoriasEContas();
+  await seedHistorico('receita', RECEITAS_HISTORICO, categoriaIdPorTipoNome, contaIdPorNome);
+  await seedHistorico('despesa', DESPESAS_HISTORICO, categoriaIdPorTipoNome, contaIdPorNome);
+  await seedHistorico('investimento', INVESTIMENTOS_HISTORICO, categoriaIdPorTipoNome, contaIdPorNome);
 }
