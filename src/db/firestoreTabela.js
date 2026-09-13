@@ -46,6 +46,17 @@ function comId(docSnap) {
   return { id: docSnap.id, ...docSnap.data() };
 }
 
+// Comparador genérico pra ordenação: funciona tanto com campos numéricos
+// ('ordem') quanto com strings que ordenam bem lexicograficamente (datas
+// no formato ISO 'AAAA-MM-DD', como as usadas em `entries.data`). Uma
+// subtração simples (a - b) só funciona com números.
+function comparar(a, b) {
+  const va = a ?? 0;
+  const vb = b ?? 0;
+  if (va === vb) return 0;
+  return va < vb ? -1 : 1;
+}
+
 // O Firestore aceita no máximo 500 operações por writeBatch. Pra backups
 // grandes (anos de lançamentos), dividimos em blocos de 450 pra sobrar
 // margem. `aplicar(lote, item)` faz o `.set()`/`.delete()` de um item no
@@ -84,7 +95,7 @@ function clausulaWhere(nomeTabela, campo, valor) {
     },
     sortBy(campoOrdem) {
       return criarQueryable(q, (snap) =>
-        snap.docs.map(comId).sort((a, b) => (a[campoOrdem] ?? 0) - (b[campoOrdem] ?? 0))
+        snap.docs.map(comId).sort((a, b) => comparar(a[campoOrdem], b[campoOrdem]))
       );
     },
     count() {
@@ -114,11 +125,16 @@ export function criarTabela(nomeTabela) {
       return criarQueryable(colecao(nomeTabela), (snap) => snap.docs.map(comId));
     },
     orderBy(campo) {
+      const buscarOrdenado = (crescente) =>
+        criarQueryable(colecao(nomeTabela), (snap) => {
+          const lista = snap.docs.map(comId).sort((a, b) => comparar(a[campo], b[campo]));
+          return crescente ? lista : lista.reverse();
+        });
       return {
-        toArray: () =>
-          criarQueryable(colecao(nomeTabela), (snap) =>
-            snap.docs.map(comId).sort((a, b) => (a[campo] ?? 0) - (b[campo] ?? 0))
-          )
+        toArray: () => buscarOrdenado(true),
+        // Dexie permite encadear .reverse() antes de .toArray() — mantido
+        // pra Historico.jsx (`orderBy('data').reverse().toArray()`).
+        reverse: () => ({ toArray: () => buscarOrdenado(false) })
       };
     },
     where(campo) {
