@@ -847,6 +847,7 @@ input:focus, select:focus {
 .pin-setup .btn-cancel { margin-top: 4px; }
 
 .tag-ajustado { border-color: var(--blue); color: var(--blue); }
+.tag-sem-categoria { border-color: #b8860b; color: #b8860b; }
 
 .entry-fatura { color: var(--text-tertiary); font-size: 12px; }
 

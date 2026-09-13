@@ -167,6 +167,9 @@ export default function Historico() {
                           {entry.recorrenciaId && <IconRepeat size={13} />}
                           {entry.previsto && <span className="tag-previsto">Previsto</span>}
                           {entry.valorAjustado && <span className="tag-previsto tag-ajustado">Valor ajustado</span>}
+                          {!entry.previsto && !entry.categoriaId && (
+                            <span className="tag-previsto tag-sem-categoria">Categorizar</span>
+                          )}
                         </div>
                         <div className="entry-detalhe">
                           {formatDateBR(entry.data)}

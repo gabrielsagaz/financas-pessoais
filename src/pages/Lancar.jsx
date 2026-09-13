@@ -106,9 +106,6 @@ export default function Lancar() {
         setMensagem('Escolha duas contas diferentes.');
         return;
       }
-    } else if (!categoriaId) {
-      setMensagem('Selecione uma categoria.');
-      return;
     }
     if (repetir && modoRepeticao === 'parcelas' && (!totalParcelas || Number(totalParcelas) < 2)) {
       setMensagem('Informe um número de vezes a partir de 2.');
