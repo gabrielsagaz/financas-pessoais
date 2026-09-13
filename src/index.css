@@ -881,6 +881,7 @@ input:focus, select:focus {
 
 .tag-ajustado { border-color: var(--blue); color: var(--blue); }
 .tag-sem-categoria { border-color: #b8860b; color: #b8860b; }
+.tag-credito { border-color: #8a5cf6; color: #8a5cf6; }
 
 .entry-fatura { color: var(--text-tertiary); font-size: 12px; }
 

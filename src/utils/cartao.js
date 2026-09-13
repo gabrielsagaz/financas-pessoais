@@ -41,6 +41,22 @@ export function calcularFaturaDoLancamento(dataISO, diaFechamento, diaVencimento
   };
 }
 
-export function contaEhCartao(conta) {
-  return conta?.tipo === 'cartao';
+// Antes, "cartão de crédito" era um tipo de CONTA inteira (`conta.tipo ===
+// 'cartao'`) — toda despesa lançada nela virava item de fatura. Agora é uma
+// escolha por LANÇAMENTO (`entry.formaPagamento: 'debito' | 'credito'`),
+// já que na prática um cartão físico costuma funcionar nos dois modos com
+// a mesma conta. `conta.aceitaCredito` só controla se aquela conta MOSTRA
+// a opção de crédito e tem dia de fechamento/vencimento configurado — a
+// conta continua sendo uma só.
+export function contaAceitaCredito(conta) {
+  return conta?.aceitaCredito === true || conta?.tipo === 'cartao'; // 'tipo: cartao' = dado antigo
+}
+
+// Um lançamento antigo (de antes dessa mudança) não tem `formaPagamento`
+// gravado — nesse caso, deduzimos pelo tipo da conta onde ele mora: se era
+// uma conta 100% cartão antiga, era crédito; senão, era débito. Lançamentos
+// novos sempre gravam `formaPagamento` explicitamente.
+export function formaPagamentoEfetiva(entry, conta) {
+  if (entry?.formaPagamento) return entry.formaPagamento;
+  return conta?.tipo === 'cartao' ? 'credito' : 'debito';
 }

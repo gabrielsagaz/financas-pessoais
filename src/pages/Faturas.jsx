@@ -2,7 +2,7 @@ import { useState, useMemo } from 'react';
 import { useLiveQuery } from '../db/useLiveQuery';
 import { db } from '../db/db';
 import { formatCurrency, formatDateBR, hojeISO, NOMES_MESES } from '../utils/format';
-import { calcularFaturaDoLancamento, contaEhCartao } from '../utils/cartao';
+import { calcularFaturaDoLancamento, contaAceitaCredito, formaPagamentoEfetiva } from '../utils/cartao';
 import { projetarTodasAsRecorrencias } from '../db/recorrencias';
 import { IconArrowLeft, IconCard } from '../components/Icons';
 import MoneyInput from '../components/MoneyInput';
@@ -14,10 +14,10 @@ export default function Faturas({ onVoltar }) {
   const recorrencias = useLiveQuery(() => db.recorrencias.toArray(), []) || [];
   const excecoesValor = useLiveQuery(() => db.excecoesValor.toArray(), []) || [];
 
-  const cartoes = useMemo(() => contas.filter(contaEhCartao), [contas]);
-  // Pagar a fatura sempre parte de uma conta que NÃO é cartão (não faz
-  // sentido "pagar o cartão com o próprio cartão").
-  const contasParaPagar = useMemo(() => contas.filter((c) => !contaEhCartao(c)), [contas]);
+  const cartoes = useMemo(() => contas.filter(contaAceitaCredito), [contas]);
+  // Pagar a fatura pode ser de qualquer conta, inclusive a mesma que aceita
+  // crédito (ex: pagar a fatura do Nubank com o saldo em débito do Nubank).
+  const contasParaPagar = contas;
 
   // Projeta os lançamentos fixos dos próximos ~12 meses, pra faturas futuras
   // de compras já comprometidas (assinaturas, parcelas) aparecerem também,
@@ -37,7 +37,7 @@ export default function Faturas({ onVoltar }) {
       <h1>Faturas</h1>
 
       {cartoes.length === 0 ? (
-        <p className="vazio">Nenhuma conta marcada como cartão de crédito ainda. Configure em Perfil → Contas.</p>
+        <p className="vazio">Nenhuma conta aceita compras no crédito ainda. Configure em Perfil → Contas.</p>
       ) : (
         cartoes.map((cartao) => (
           <FaturasDoCartao
@@ -60,7 +60,9 @@ function FaturasDoCartao({ cartao, entradas, entradasReais, contasParaPagar }) {
   }, [cartao]);
 
   const faturas = useMemo(() => {
-    const doCartao = entradas.filter((e) => e.contaId === cartao.id && e.tipo === 'despesa');
+    const doCartao = entradas.filter(
+      (e) => e.contaId === cartao.id && e.tipo === 'despesa' && formaPagamentoEfetiva(e, cartao) === 'credito'
+    );
     const grupos = {};
     for (const e of doCartao) {
       const { anoFatura, mesFatura, dataVencimento } = calcularFaturaDoLancamento(e.data, cartao.diaFechamento, cartao.diaVencimento);
@@ -70,10 +72,12 @@ function FaturasDoCartao({ cartao, entradas, entradasReais, contasParaPagar }) {
       if (e.previsto) grupos[chave].temPrevisto = true;
     }
 
-    // Pagamentos: transferências reais marcadas como pagamento desta fatura
-    // (ver `pagamentoFaturaChave`, gravado ao clicar em "Pagar" abaixo).
+    // Pagamentos: transferências (sem conta de destino — o "destino" é só
+    // abater a fatura, não outra conta de verdade) marcadas com o cartão e
+    // a fatura a que se referem (ver `pagamentoFaturaChave`, gravado ao
+    // clicar em "Pagar" abaixo).
     const pagamentos = entradasReais.filter(
-      (e) => e.tipo === 'transferencia' && e.contaDestinoId === cartao.id && e.pagamentoFaturaChave
+      (e) => e.tipo === 'transferencia' && e.cartaoId === cartao.id && e.pagamentoFaturaChave
     );
     for (const p of pagamentos) {
       const chave = p.pagamentoFaturaChave;
@@ -136,7 +140,8 @@ function FaturaItem({ fatura: f, cartao, faturaAtualChave, contasParaPagar }) {
       categoriaId: null,
       subcategoriaId: null,
       contaId: contaOrigemId,
-      contaDestinoId: cartao.id,
+      contaDestinoId: null, // não existe mais uma "conta cartão" separada pra receber
+      cartaoId: cartao.id,
       nota: `Pagamento fatura ${NOMES_MESES[f.mesFatura - 1]}/${f.anoFatura}`,
       pagamentoFaturaChave: f.chave,
       origem: 'manual',
@@ -150,12 +155,12 @@ function FaturaItem({ fatura: f, cartao, faturaAtualChave, contasParaPagar }) {
   // Remove TODAS as transferências marcadas como pagamento desta fatura —
   // desfaz o pagamento por completo (se houve mais de um pagamento parcial,
   // os dois somem juntos; simples de propósito, dá pra pagar de novo na hora).
-  // Filtra por `tipo` (indexado) e depois em JS — `contaDestinoId` e
+  // Filtra por `tipo` (indexado) e depois em JS — `cartaoId` e
   // `pagamentoFaturaChave` não são campos indexados no banco.
   async function retirarPagamento() {
     const alvos = await db.entries
       .where('tipo').equals('transferencia')
-      .filter((e) => e.contaDestinoId === cartao.id && e.pagamentoFaturaChave === f.chave)
+      .filter((e) => e.cartaoId === cartao.id && e.pagamentoFaturaChave === f.chave)
       .toArray();
     await db.entries.bulkDelete(alvos.map((e) => e.id));
     setConfirmandoRetirar(false);

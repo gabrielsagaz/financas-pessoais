@@ -35,7 +35,7 @@ export async function removerValorExcecao(recorrenciaId, anoMes) {
   if (existente) await db.excecoesValor.delete(existente.id);
 }
 
-export async function criarRecorrencia({ tipo, valor, categoriaId, subcategoriaId, contaId, nota, dataInicio, totalParcelas }) {
+export async function criarRecorrencia({ tipo, valor, categoriaId, subcategoriaId, contaId, formaPagamento, nota, dataInicio, totalParcelas }) {
   const { ano, mes } = anoMesDe(dataInicio);
   const diaDoMes = Number(dataInicio.split('-')[2]);
 
@@ -45,6 +45,7 @@ export async function criarRecorrencia({ tipo, valor, categoriaId, subcategoriaI
     categoriaId,
     subcategoriaId: subcategoriaId ?? null,
     contaId: contaId ?? null,
+    formaPagamento: formaPagamento ?? null,
     nota: nota || '',
     diaDoMes,
     ativa: true,
@@ -93,6 +94,7 @@ async function gerarLancamentoDoMes(recorrencia, ano, mes) {
     categoriaId: recorrencia.categoriaId,
     subcategoriaId: recorrencia.subcategoriaId ?? null,
     contaId: recorrencia.contaId ?? null,
+    formaPagamento: recorrencia.formaPagamento ?? null,
     nota: recorrencia.nota || '',
     origem: 'manual',
     externalId: null,
@@ -186,6 +188,7 @@ export function projetarOcorrencias(recorrencia, jaGeradas, excecoesPorAnoMes, a
       categoriaId: recorrencia.categoriaId,
       subcategoriaId: recorrencia.subcategoriaId ?? null,
       contaId: recorrencia.contaId ?? null,
+      formaPagamento: recorrencia.formaPagamento ?? null,
       nota: recorrencia.nota || '',
       recorrenciaId: recorrencia.id,
       numeroParcela: ehParcelada ? numeroParcela : null,

@@ -4,7 +4,7 @@ import { db } from '../db/db';
 import { TIPOS, TIPOS_TODOS, corDoTipo } from '../db/defaultData';
 import { formatCurrency, formatDateBR, NOMES_MESES, anoMesDe } from '../utils/format';
 import { projetarTodasAsRecorrencias, criarRecorrencia, definirValorExcecao, removerValorExcecao } from '../db/recorrencias';
-import { calcularFaturaDoLancamento, contaEhCartao } from '../utils/cartao';
+import { calcularFaturaDoLancamento, contaAceitaCredito, formaPagamentoEfetiva } from '../utils/cartao';
 import EditableSelect from '../components/EditableSelect';
 import MoneyInput from '../components/MoneyInput';
 import ConfirmDialog from '../components/ConfirmDialog';
@@ -76,6 +76,8 @@ export default function Historico() {
       subcategoriaId: entry.subcategoriaId ?? null,
       contaId: entry.contaId ?? null,
       contaDestinoId: entry.contaDestinoId ?? null,
+      formaPagamento: entry.formaPagamento ?? null,
+      cartaoId: entry.cartaoId ?? null,
       nota: entry.nota || '',
       origem: 'manual',
       externalId: null,
@@ -90,7 +92,8 @@ export default function Historico() {
   function descreverFatura(entry) {
     if (entry.tipo === 'transferencia') return null;
     const conta = contaPorId[entry.contaId];
-    if (!conta || !contaEhCartao(conta)) return null;
+    if (!conta || !contaAceitaCredito(conta)) return null;
+    if (formaPagamentoEfetiva(entry, conta) !== 'credito') return null;
     const { mesFatura, dataVencimento } = calcularFaturaDoLancamento(entry.data, conta.diaFechamento, conta.diaVencimento);
     return `Fatura de ${NOMES_MESES[mesFatura - 1]} · vence ${formatDateBR(dataVencimento)}`;
   }
@@ -150,11 +153,20 @@ export default function Historico() {
                     {entry.tipo === 'transferencia' ? (
                       <>
                         <div className="entry-categoria">
-                          Transferência
+                          {entry.pagamentoFaturaChave ? 'Pagamento de fatura' : 'Transferência'}
                           {entry.previsto && <span className="tag-previsto">Previsto</span>}
                         </div>
                         <div className="entry-detalhe">
-                          {formatDateBR(entry.data)} · {contaPorId[entry.contaId]?.nome || '?'} → {contaPorId[entry.contaDestinoId]?.nome || '?'}
+                          {entry.pagamentoFaturaChave ? (
+                            <>
+                              {formatDateBR(entry.data)} · {contaPorId[entry.contaId]?.nome || '?'}
+                              {entry.cartaoId && contaPorId[entry.cartaoId] && ` · ${contaPorId[entry.cartaoId].nome}`}
+                            </>
+                          ) : (
+                            <>
+                              {formatDateBR(entry.data)} · {contaPorId[entry.contaId]?.nome || '?'} → {contaPorId[entry.contaDestinoId]?.nome || '?'}
+                            </>
+                          )}
                           {entry.nota && ` · ${entry.nota}`}
                         </div>
                       </>
@@ -169,6 +181,11 @@ export default function Historico() {
                           {entry.valorAjustado && <span className="tag-previsto tag-ajustado">Valor ajustado</span>}
                           {!entry.previsto && !entry.categoriaId && (
                             <span className="tag-previsto tag-sem-categoria">Categorizar</span>
+                          )}
+                          {entry.tipo === 'despesa' && contaPorId[entry.contaId] &&
+                            contaAceitaCredito(contaPorId[entry.contaId]) &&
+                            formaPagamentoEfetiva(entry, contaPorId[entry.contaId]) === 'credito' && (
+                              <span className="tag-previsto tag-credito">Crédito</span>
                           )}
                         </div>
                         <div className="entry-detalhe">
@@ -221,6 +238,7 @@ function EditarEntry({ entry, onCancelar, onSalvo }) {
   const [subcategoriaId, setSubcategoriaId] = useState(entry.subcategoriaId);
   const [contaId, setContaId] = useState(entry.contaId);
   const [contaDestinoId, setContaDestinoId] = useState(entry.contaDestinoId ?? null);
+  const [formaPagamento, setFormaPagamento] = useState(entry.formaPagamento || 'debito');
   const [nota, setNota] = useState(entry.nota || '');
   const [repetir, setRepetir] = useState(false);
   const [modoRepeticao, setModoRepeticao] = useState('infinito'); // 'infinito' | 'parcelas'
@@ -228,6 +246,7 @@ function EditarEntry({ entry, onCancelar, onSalvo }) {
   const [salvando, setSalvando] = useState(false);
 
   const ehTransferencia = entry.tipo === 'transferencia';
+  const ehPagamentoFatura = ehTransferencia && !!entry.pagamentoFaturaChave;
   const jaEhRecorrente = !!entry.recorrenciaId;
 
   const categorias = useLiveQuery(
@@ -239,6 +258,8 @@ function EditarEntry({ entry, onCancelar, onSalvo }) {
     [categoriaId]
   ) || [];
   const contas = useLiveQuery(() => db.contas.orderBy('ordem').toArray()) || [];
+  const contaSelecionada = contas.find((c) => c.id === contaId);
+  const mostrarTogglePagamento = entry.tipo === 'despesa' && contaSelecionada && contaAceitaCredito(contaSelecionada);
 
   async function criarCategoria(nome) {
     return db.categorias.add({ tipo: entry.tipo, nome, ordem: categorias.length });
@@ -254,7 +275,10 @@ function EditarEntry({ entry, onCancelar, onSalvo }) {
     setSalvando(true);
     try {
       if (ehTransferencia) {
-        await db.entries.update(entry.id, { valor, data, contaId, contaDestinoId, nota: nota.trim() });
+        const mudancas = ehPagamentoFatura
+          ? { valor, data, contaId, nota: nota.trim() } // sem contaDestinoId — não existe pra pagamento de fatura
+          : { valor, data, contaId, contaDestinoId, nota: nota.trim() };
+        await db.entries.update(entry.id, mudancas);
       } else if (repetir && !jaEhRecorrente) {
         // Transforma este lançamento avulso num lançamento fixo: remove a
         // entrada solta e deixa a recorrência gerar a ocorrência do mesmo
@@ -267,6 +291,7 @@ function EditarEntry({ entry, onCancelar, onSalvo }) {
           categoriaId,
           subcategoriaId: subcategoriaId ?? null,
           contaId: contaId ?? null,
+          formaPagamento: entry.tipo === 'despesa' ? (mostrarTogglePagamento ? formaPagamento : 'debito') : null,
           nota: nota.trim(),
           dataInicio: data,
           totalParcelas: parcelas
@@ -278,6 +303,7 @@ function EditarEntry({ entry, onCancelar, onSalvo }) {
           categoriaId,
           subcategoriaId: subcategoriaId ?? null,
           contaId: contaId ?? null,
+          formaPagamento: entry.tipo === 'despesa' ? (mostrarTogglePagamento ? formaPagamento : 'debito') : null,
           nota: nota.trim()
         });
       }
@@ -301,7 +327,9 @@ function EditarEntry({ entry, onCancelar, onSalvo }) {
       {ehTransferencia ? (
         <>
           <EditableSelect label="De (saiu de)" options={contas} value={contaId} onChange={setContaId} onCreate={criarConta} />
-          <EditableSelect label="Para (entrou em)" options={contas.filter((c) => c.id !== contaId)} value={contaDestinoId} onChange={setContaDestinoId} onCreate={criarConta} />
+          {!ehPagamentoFatura && (
+            <EditableSelect label="Para (entrou em)" options={contas.filter((c) => c.id !== contaId)} value={contaDestinoId} onChange={setContaDestinoId} onCreate={criarConta} />
+          )}
         </>
       ) : (
         <>
@@ -310,6 +338,28 @@ function EditarEntry({ entry, onCancelar, onSalvo }) {
             <EditableSelect label="Subcategoria" options={subcategorias} value={subcategoriaId} onChange={setSubcategoriaId} onCreate={criarSubcategoria} />
           )}
           <EditableSelect label="Conta" options={contas} value={contaId} onChange={setContaId} onCreate={criarConta} />
+
+          {mostrarTogglePagamento && (
+            <div className="field">
+              <label>Forma de pagamento</label>
+              <div className="tipo-tabs">
+                <button
+                  type="button"
+                  className={`tipo-tab ${formaPagamento === 'debito' ? 'ativo' : ''}`}
+                  onClick={() => setFormaPagamento('debito')}
+                >
+                  Débito
+                </button>
+                <button
+                  type="button"
+                  className={`tipo-tab ${formaPagamento === 'credito' ? 'ativo' : ''}`}
+                  onClick={() => setFormaPagamento('credito')}
+                >
+                  Crédito
+                </button>
+              </div>
+            </div>
+          )}
         </>
       )}
 

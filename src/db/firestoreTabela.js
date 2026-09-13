@@ -105,14 +105,23 @@ function clausulaWhere(nomeTabela, campo, valor) {
       const snap = await getDocs(q);
       await executarEmLotes(snap.docs, (lote, d) => lote.delete(d.ref));
     },
-    // Filtro extra aplicado em memória (equivalente ao `.and()` do Dexie).
-    // Usado só em uma consulta pontual e sempre com `await` direto, então
-    // não precisa suportar useLiveQuery.
+    // Filtro extra aplicado em memória (equivalente ao `.and()`/`.filter()`
+    // do Dexie). `.and()` é usado quando o próximo passo é `.first()`;
+    // `.filter()` quando é `.toArray()` — mantemos os dois nomes porque o
+    // código já usava ambos antes desta camada existir.
     and(filtroExtra) {
       return {
         async first() {
           const snap = await getDocs(q);
           return snap.docs.map(comId).find(filtroExtra);
+        }
+      };
+    },
+    filter(filtroExtra) {
+      return {
+        async toArray() {
+          const snap = await getDocs(q);
+          return snap.docs.map(comId).filter(filtroExtra);
         }
       };
     }

@@ -4,6 +4,7 @@ import { db } from '../db/db';
 import { TIPOS, TIPOS_TODOS } from '../db/defaultData';
 import { hojeISO, formatCurrency } from '../utils/format';
 import { criarRecorrencia, alternarRecorrencia, excluirRecorrencia } from '../db/recorrencias';
+import { contaAceitaCredito } from '../utils/cartao';
 import MoneyInput from '../components/MoneyInput';
 import EditableSelect from '../components/EditableSelect';
 import ConfirmDialog from '../components/ConfirmDialog';
@@ -20,6 +21,7 @@ export default function Lancar() {
   const [subcategoriaId, setSubcategoriaId] = useState(null);
   const [contaId, setContaId] = useState(null); // conta única (financeiro) OU conta de ORIGEM (transferência)
   const [contaDestinoId, setContaDestinoId] = useState(null); // só transferência
+  const [formaPagamento, setFormaPagamento] = useState('debito'); // só despesa, quando a conta aceita crédito
   const [nota, setNota] = useState('');
   const [repetir, setRepetir] = useState(false);
   const [modoRepeticao, setModoRepeticao] = useState('infinito'); // 'infinito' | 'parcelas'
@@ -52,14 +54,22 @@ export default function Lancar() {
   const categoriaPorId = Object.fromEntries(todasCategorias.map((c) => [c.id, c]));
   const subcategoriaPorId = Object.fromEntries(todasSubcategorias.map((s) => [s.id, s]));
   const contaPorId = Object.fromEntries(contas.map((c) => [c.id, c]));
+  const contaSelecionada = contaPorId[contaId];
+  const mostrarTogglePagamento = tipo === 'despesa' && contaSelecionada && contaAceitaCredito(contaSelecionada);
 
   function mudarTipo(novoTipo) {
     setTipo(novoTipo);
     setCategoriaId(null);
     setSubcategoriaId(null);
     setContaDestinoId(null);
+    setFormaPagamento('debito');
     setRepetir(false);
     setErro('');
+  }
+
+  function mudarConta(id) {
+    setContaId(id);
+    setFormaPagamento('debito');
   }
 
   function mudarCategoria(id) {
@@ -88,6 +98,7 @@ export default function Lancar() {
     setCategoriaId(null);
     setSubcategoriaId(null);
     setContaDestinoId(null);
+    setFormaPagamento('debito');
     setRepetir(false);
     setModoRepeticao('infinito');
     setTotalParcelas('3');
@@ -141,6 +152,7 @@ export default function Lancar() {
           categoriaId,
           subcategoriaId: subcategoriaId ?? null,
           contaId: contaId ?? null,
+          formaPagamento: mostrarTogglePagamento ? formaPagamento : 'debito',
           nota: nota.trim(),
           dataInicio: data,
           totalParcelas: parcelas
@@ -154,6 +166,7 @@ export default function Lancar() {
           categoriaId,
           subcategoriaId: subcategoriaId ?? null,
           contaId: contaId ?? null,
+          formaPagamento: mostrarTogglePagamento ? formaPagamento : 'debito',
           nota: nota.trim(),
           origem: 'manual',
           externalId: null,
@@ -249,10 +262,32 @@ export default function Lancar() {
               label="Conta"
               options={contas}
               value={contaId}
-              onChange={setContaId}
+              onChange={mudarConta}
               onCreate={criarConta}
               placeholder="Selecione a conta"
             />
+
+            {mostrarTogglePagamento && (
+              <div className="field">
+                <label>Forma de pagamento</label>
+                <div className="tipo-tabs">
+                  <button
+                    type="button"
+                    className={`tipo-tab ${formaPagamento === 'debito' ? 'ativo' : ''}`}
+                    onClick={() => setFormaPagamento('debito')}
+                  >
+                    Débito
+                  </button>
+                  <button
+                    type="button"
+                    className={`tipo-tab ${formaPagamento === 'credito' ? 'ativo' : ''}`}
+                    onClick={() => setFormaPagamento('credito')}
+                  >
+                    Crédito
+                  </button>
+                </div>
+              </div>
+            )}
           </>
         )}
 

@@ -7,7 +7,7 @@ import MoneyInput from '../components/MoneyInput';
 import PinPad from '../components/PinPad';
 import { definirPin, removerPin, pinEstaAtivo } from '../db/security';
 import { exportarBackup, baixarBackupComoArquivo, importarBackup, apagarTodosOsLancamentos } from '../db/backup';
-import { contaEhCartao } from '../utils/cartao';
+import { contaAceitaCredito } from '../utils/cartao';
 import { contaTemSaldoControlado, calcularSaldoConta } from '../db/saldos';
 import { formatCurrency, formatDateBR, hojeISO } from '../utils/format';
 import { salvarPerfil, salvarTema, perfilPadrao } from '../db/preferencias';
@@ -331,7 +331,7 @@ function ListaContas() {
         return (
           <div key={conta.id} className="categoria-card">
             <div className="categoria-header" onClick={() => setExpandidaId(expandidaId === conta.id ? null : conta.id)}>
-              {contaEhCartao(conta) && <IconCard size={16} />}
+              {contaAceitaCredito(conta) && <IconCard size={16} />}
               <input
                 className="categoria-nome-input"
                 value={conta.nome}
@@ -454,20 +454,21 @@ function ConfigSaldo({ conta, entradas }) {
   );
 }
 
-// Configuração de "cartão de crédito" pra uma conta: dia de fechamento
-// (quando a fatura atual para de acumular) e dia de vencimento (quando essa
-// fatura precisa ser paga). Guardado direto na própria conta — não precisa
-// de tabela nova, só de mais alguns campos.
+// Configuração de "aceita compras no crédito" pra uma conta: dia de
+// fechamento (quando a fatura atual para de acumular) e dia de vencimento
+// (quando essa fatura precisa ser paga). A escolha entre crédito/débito é
+// feita em CADA lançamento (ver Lancar.jsx) — isso aqui só liga a opção e
+// guarda os dias, direto na própria conta.
 function ConfigCartao({ conta }) {
-  const ehCartao = contaEhCartao(conta);
+  const aceitaCredito = contaAceitaCredito(conta);
   const [diaFechamento, setDiaFechamento] = useState(conta.diaFechamento || 1);
   const [diaVencimento, setDiaVencimento] = useState(conta.diaVencimento || 10);
 
-  async function alternarCartao() {
-    if (ehCartao) {
-      await db.contas.update(conta.id, { tipo: 'conta' });
+  async function alternarAceitaCredito() {
+    if (aceitaCredito) {
+      await db.contas.update(conta.id, { aceitaCredito: false, tipo: 'conta' });
     } else {
-      await db.contas.update(conta.id, { tipo: 'cartao', diaFechamento, diaVencimento });
+      await db.contas.update(conta.id, { aceitaCredito: true, tipo: 'conta', diaFechamento, diaVencimento });
     }
   }
 
@@ -480,11 +481,11 @@ function ConfigCartao({ conta }) {
   return (
     <div className="config-cartao">
       <label className="switch-row">
-        <span className="switch-label"><IconCard size={17} /> É cartão de crédito</span>
-        <span className={`switch ${ehCartao ? 'ativo' : ''}`} onClick={alternarCartao} />
+        <span className="switch-label"><IconCard size={17} /> Aceita compras no crédito</span>
+        <span className={`switch ${aceitaCredito ? 'ativo' : ''}`} onClick={alternarAceitaCredito} />
       </label>
 
-      {ehCartao && (
+      {aceitaCredito && (
         <div className="config-cartao-dias">
           <div className="field">
             <label>Dia de fechamento da fatura</label>
@@ -495,7 +496,9 @@ function ConfigCartao({ conta }) {
             <input type="number" min="1" max="31" value={diaVencimento} onChange={(e) => salvarDias('vencimento', e.target.value)} />
           </div>
           <p className="repeticao-explicacao">
-            Compras depois do dia de fechamento entram na fatura seguinte. Isso só organiza a visualização no Histórico — não controla saldo nem gera cobrança automática.
+            Ao lançar uma despesa nesta conta, você escolhe se foi no crédito ou no débito. Compras no crédito depois
+            do dia de fechamento entram na fatura seguinte — isso só organiza a visualização em Faturas/Histórico,
+            não controla saldo nem gera cobrança automática.
           </p>
         </div>
       )}
