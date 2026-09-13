@@ -4,7 +4,7 @@ import { db } from '../db/db';
 import { TIPOS, TIPOS_TODOS, corDoTipo } from '../db/defaultData';
 import { formatCurrency, formatDateBR, NOMES_MESES, anoMesDe } from '../utils/format';
 import { projetarTodasAsRecorrencias, criarRecorrencia, definirValorExcecao, removerValorExcecao } from '../db/recorrencias';
-import { calcularFaturaDoLancamento, contaAceitaCredito, formaPagamentoEfetiva } from '../utils/cartao';
+import { calcularFaturaDoLancamento, formaPagamentoEfetiva, diaFechamentoEfetivo, diaVencimentoEfetivo } from '../utils/cartao';
 import EditableSelect from '../components/EditableSelect';
 import MoneyInput from '../components/MoneyInput';
 import ConfirmDialog from '../components/ConfirmDialog';
@@ -92,9 +92,9 @@ export default function Historico() {
   function descreverFatura(entry) {
     if (entry.tipo === 'transferencia') return null;
     const conta = contaPorId[entry.contaId];
-    if (!conta || !contaAceitaCredito(conta)) return null;
+    if (!conta) return null;
     if (formaPagamentoEfetiva(entry, conta) !== 'credito') return null;
-    const { mesFatura, dataVencimento } = calcularFaturaDoLancamento(entry.data, conta.diaFechamento, conta.diaVencimento);
+    const { mesFatura, dataVencimento } = calcularFaturaDoLancamento(entry.data, diaFechamentoEfetivo(conta), diaVencimentoEfetivo(conta));
     return `Fatura de ${NOMES_MESES[mesFatura - 1]} · vence ${formatDateBR(dataVencimento)}`;
   }
 
@@ -183,7 +183,6 @@ export default function Historico() {
                             <span className="tag-previsto tag-sem-categoria">Categorizar</span>
                           )}
                           {entry.tipo === 'despesa' && contaPorId[entry.contaId] &&
-                            contaAceitaCredito(contaPorId[entry.contaId]) &&
                             formaPagamentoEfetiva(entry, contaPorId[entry.contaId]) === 'credito' && (
                               <span className="tag-previsto tag-credito">Crédito</span>
                           )}
@@ -258,8 +257,7 @@ function EditarEntry({ entry, onCancelar, onSalvo }) {
     [categoriaId]
   ) || [];
   const contas = useLiveQuery(() => db.contas.orderBy('ordem').toArray()) || [];
-  const contaSelecionada = contas.find((c) => c.id === contaId);
-  const mostrarTogglePagamento = entry.tipo === 'despesa' && contaSelecionada && contaAceitaCredito(contaSelecionada);
+  const mostrarTogglePagamento = entry.tipo === 'despesa';
 
   async function criarCategoria(nome) {
     return db.categorias.add({ tipo: entry.tipo, nome, ordem: categorias.length });

@@ -2,7 +2,7 @@ import { useState, useMemo } from 'react';
 import { useLiveQuery } from '../db/useLiveQuery';
 import { db } from '../db/db';
 import { formatCurrency, formatDateBR, hojeISO, NOMES_MESES } from '../utils/format';
-import { calcularFaturaDoLancamento, contaAceitaCredito, formaPagamentoEfetiva } from '../utils/cartao';
+import { calcularFaturaDoLancamento, formaPagamentoEfetiva, diaFechamentoEfetivo, diaVencimentoEfetivo } from '../utils/cartao';
 import { projetarTodasAsRecorrencias } from '../db/recorrencias';
 import { IconArrowLeft, IconCard } from '../components/Icons';
 import MoneyInput from '../components/MoneyInput';
@@ -14,9 +14,8 @@ export default function Faturas({ onVoltar }) {
   const recorrencias = useLiveQuery(() => db.recorrencias.toArray(), []) || [];
   const excecoesValor = useLiveQuery(() => db.excecoesValor.toArray(), []) || [];
 
-  const cartoes = useMemo(() => contas.filter(contaAceitaCredito), [contas]);
-  // Pagar a fatura pode ser de qualquer conta, inclusive a mesma que aceita
-  // crédito (ex: pagar a fatura do Nubank com o saldo em débito do Nubank).
+  // Pagar a fatura pode ser de qualquer conta, inclusive a mesma que gerou
+  // o crédito (ex: pagar a fatura do Nubank com o saldo em débito do Nubank).
   const contasParaPagar = contas;
 
   // Projeta os lançamentos fixos dos próximos ~12 meses, pra faturas futuras
@@ -29,6 +28,17 @@ export default function Faturas({ onVoltar }) {
 
   const todasEntradas = useMemo(() => [...entradas, ...previsoes], [entradas, previsoes]);
 
+  // "Cartão" deixou de ser uma marcação na conta — é qualquer conta que já
+  // teve (ou tem prevista) pelo menos uma despesa lançada em crédito.
+  const cartoes = useMemo(() => {
+    const idsComCredito = new Set(
+      todasEntradas
+        .filter((e) => e.tipo === 'despesa' && formaPagamentoEfetiva(e, contas.find((c) => c.id === e.contaId)) === 'credito')
+        .map((e) => e.contaId)
+    );
+    return contas.filter((c) => idsComCredito.has(c.id));
+  }, [contas, todasEntradas]);
+
   return (
     <div className="page">
       <button type="button" className="botao-voltar" onClick={onVoltar}>
@@ -37,7 +47,7 @@ export default function Faturas({ onVoltar }) {
       <h1>Faturas</h1>
 
       {cartoes.length === 0 ? (
-        <p className="vazio">Nenhuma conta aceita compras no crédito ainda. Configure em Perfil → Contas.</p>
+        <p className="vazio">Nenhuma despesa lançada no crédito ainda. Ao lançar uma despesa, escolha "Crédito" na forma de pagamento.</p>
       ) : (
         cartoes.map((cartao) => (
           <FaturasDoCartao
@@ -55,7 +65,7 @@ export default function Faturas({ onVoltar }) {
 
 function FaturasDoCartao({ cartao, entradas, entradasReais, contasParaPagar }) {
   const faturaAtualChave = useMemo(() => {
-    const { anoFatura, mesFatura } = calcularFaturaDoLancamento(hojeISO(), cartao.diaFechamento, cartao.diaVencimento);
+    const { anoFatura, mesFatura } = calcularFaturaDoLancamento(hojeISO(), diaFechamentoEfetivo(cartao), diaVencimentoEfetivo(cartao));
     return `${anoFatura}-${String(mesFatura).padStart(2, '0')}`;
   }, [cartao]);
 
@@ -65,7 +75,7 @@ function FaturasDoCartao({ cartao, entradas, entradasReais, contasParaPagar }) {
     );
     const grupos = {};
     for (const e of doCartao) {
-      const { anoFatura, mesFatura, dataVencimento } = calcularFaturaDoLancamento(e.data, cartao.diaFechamento, cartao.diaVencimento);
+      const { anoFatura, mesFatura, dataVencimento } = calcularFaturaDoLancamento(e.data, diaFechamentoEfetivo(cartao), diaVencimentoEfetivo(cartao));
       const chave = `${anoFatura}-${String(mesFatura).padStart(2, '0')}`;
       if (!grupos[chave]) grupos[chave] = { chave, anoFatura, mesFatura, dataVencimento, total: 0, temPrevisto: false, pago: 0 };
       grupos[chave].total += e.valor;

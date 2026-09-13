@@ -4,7 +4,6 @@ import { db } from '../db/db';
 import { TIPOS, TIPOS_TODOS } from '../db/defaultData';
 import { hojeISO, formatCurrency } from '../utils/format';
 import { criarRecorrencia, alternarRecorrencia, excluirRecorrencia } from '../db/recorrencias';
-import { contaAceitaCredito } from '../utils/cartao';
 import MoneyInput from '../components/MoneyInput';
 import EditableSelect from '../components/EditableSelect';
 import ConfirmDialog from '../components/ConfirmDialog';
@@ -54,8 +53,7 @@ export default function Lancar() {
   const categoriaPorId = Object.fromEntries(todasCategorias.map((c) => [c.id, c]));
   const subcategoriaPorId = Object.fromEntries(todasSubcategorias.map((s) => [s.id, s]));
   const contaPorId = Object.fromEntries(contas.map((c) => [c.id, c]));
-  const contaSelecionada = contaPorId[contaId];
-  const mostrarTogglePagamento = tipo === 'despesa' && contaSelecionada && contaAceitaCredito(contaSelecionada);
+  const mostrarTogglePagamento = tipo === 'despesa';
 
   function mudarTipo(novoTipo) {
     setTipo(novoTipo);
@@ -67,10 +65,6 @@ export default function Lancar() {
     setErro('');
   }
 
-  function mudarConta(id) {
-    setContaId(id);
-    setFormaPagamento('debito');
-  }
 
   function mudarCategoria(id) {
     setCategoriaId(id);
@@ -262,7 +256,7 @@ export default function Lancar() {
               label="Conta"
               options={contas}
               value={contaId}
-              onChange={mudarConta}
+              onChange={setContaId}
               onCreate={criarConta}
               placeholder="Selecione a conta"
             />

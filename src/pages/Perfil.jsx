@@ -7,7 +7,7 @@ import MoneyInput from '../components/MoneyInput';
 import PinPad from '../components/PinPad';
 import { definirPin, removerPin, pinEstaAtivo } from '../db/security';
 import { exportarBackup, baixarBackupComoArquivo, importarBackup, apagarTodosOsLancamentos } from '../db/backup';
-import { contaAceitaCredito } from '../utils/cartao';
+import { diaFechamentoEfetivo, diaVencimentoEfetivo } from '../utils/cartao';
 import { contaTemSaldoControlado, calcularSaldoConta } from '../db/saldos';
 import { formatCurrency, formatDateBR, hojeISO } from '../utils/format';
 import { salvarPerfil, salvarTema, perfilPadrao } from '../db/preferencias';
@@ -331,7 +331,6 @@ function ListaContas() {
         return (
           <div key={conta.id} className="categoria-card">
             <div className="categoria-header" onClick={() => setExpandidaId(expandidaId === conta.id ? null : conta.id)}>
-              {contaAceitaCredito(conta) && <IconCard size={16} />}
               <input
                 className="categoria-nome-input"
                 value={conta.nome}
@@ -454,23 +453,14 @@ function ConfigSaldo({ conta, entradas }) {
   );
 }
 
-// Configuração de "aceita compras no crédito" pra uma conta: dia de
-// fechamento (quando a fatura atual para de acumular) e dia de vencimento
-// (quando essa fatura precisa ser paga). A escolha entre crédito/débito é
-// feita em CADA lançamento (ver Lancar.jsx) — isso aqui só liga a opção e
-// guarda os dias, direto na própria conta.
+// Configuração de fatura pra uma conta: dia de fechamento (quando a fatura
+// atual para de acumular) e dia de vencimento (quando essa fatura precisa
+// ser paga). Toda conta já aceita débito e crédito por lançamento (ver
+// Lancar.jsx) — isso aqui só existe pra personalizar os dias, com um
+// padrão sensato (fecha dia 1, vence dia 10) pra quem nunca mexeu.
 function ConfigCartao({ conta }) {
-  const aceitaCredito = contaAceitaCredito(conta);
-  const [diaFechamento, setDiaFechamento] = useState(conta.diaFechamento || 1);
-  const [diaVencimento, setDiaVencimento] = useState(conta.diaVencimento || 10);
-
-  async function alternarAceitaCredito() {
-    if (aceitaCredito) {
-      await db.contas.update(conta.id, { aceitaCredito: false, tipo: 'conta' });
-    } else {
-      await db.contas.update(conta.id, { aceitaCredito: true, tipo: 'conta', diaFechamento, diaVencimento });
-    }
-  }
+  const [diaFechamento, setDiaFechamento] = useState(diaFechamentoEfetivo(conta));
+  const [diaVencimento, setDiaVencimento] = useState(diaVencimentoEfetivo(conta));
 
   async function salvarDias(campo, valor) {
     const dia = Math.min(31, Math.max(1, Number(valor) || 1));
@@ -480,28 +470,21 @@ function ConfigCartao({ conta }) {
 
   return (
     <div className="config-cartao">
-      <label className="switch-row">
-        <span className="switch-label"><IconCard size={17} /> Aceita compras no crédito</span>
-        <span className={`switch ${aceitaCredito ? 'ativo' : ''}`} onClick={alternarAceitaCredito} />
-      </label>
-
-      {aceitaCredito && (
-        <div className="config-cartao-dias">
-          <div className="field">
-            <label>Dia de fechamento da fatura</label>
-            <input type="number" min="1" max="31" value={diaFechamento} onChange={(e) => salvarDias('fechamento', e.target.value)} />
-          </div>
-          <div className="field">
-            <label>Dia de vencimento</label>
-            <input type="number" min="1" max="31" value={diaVencimento} onChange={(e) => salvarDias('vencimento', e.target.value)} />
-          </div>
-          <p className="repeticao-explicacao">
-            Ao lançar uma despesa nesta conta, você escolhe se foi no crédito ou no débito. Compras no crédito depois
-            do dia de fechamento entram na fatura seguinte — isso só organiza a visualização em Faturas/Histórico,
-            não controla saldo nem gera cobrança automática.
-          </p>
+      <div className="config-cartao-dias">
+        <div className="field">
+          <label><IconCard size={15} /> Dia de fechamento da fatura</label>
+          <input type="number" min="1" max="31" value={diaFechamento} onChange={(e) => salvarDias('fechamento', e.target.value)} />
         </div>
-      )}
+        <div className="field">
+          <label>Dia de vencimento</label>
+          <input type="number" min="1" max="31" value={diaVencimento} onChange={(e) => salvarDias('vencimento', e.target.value)} />
+        </div>
+        <p className="repeticao-explicacao">
+          Ao lançar uma despesa nesta conta, você escolhe se foi no crédito ou no débito. Compras no crédito depois
+          do dia de fechamento entram na fatura seguinte — isso só organiza a visualização em Faturas/Histórico,
+          não controla saldo nem gera cobrança automática.
+        </p>
+      </div>
     </div>
   );
 }
