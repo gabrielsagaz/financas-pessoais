@@ -33,7 +33,7 @@ export default function EditableSelect({
           <select
             disabled={disabled}
             value={value ?? ''}
-            onChange={(e) => onChange(e.target.value ? Number(e.target.value) : null)}
+            onChange={(e) => onChange(e.target.value || null)}
           >
             <option value="">{placeholder}</option>
             {options.map((o) => (

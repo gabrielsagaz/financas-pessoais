@@ -196,7 +196,7 @@ function FaturaItem({ fatura: f, cartao, faturaAtualChave, contasParaPagar }) {
         <div className="fatura-pagar-form">
           <div className="field">
             <label>Pagar com</label>
-            <select value={contaOrigemId ?? ''} onChange={(e) => setContaOrigemId(e.target.value ? Number(e.target.value) : null)}>
+            <select value={contaOrigemId ?? ''} onChange={(e) => setContaOrigemId(e.target.value || null)}>
               <option value="">Selecione a conta</option>
               {contasParaPagar.map((c) => <option key={c.id} value={c.id}>{c.nome}</option>)}
             </select>
