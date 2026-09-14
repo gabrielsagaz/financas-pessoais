@@ -114,6 +114,23 @@ export function useResumoFinanceiro() {
       .sort((a, b) => b.valor - a.valor);
   }, [entradasDoPeriodo, categoriaPorId]);
 
+  // Mesma lógica do gráfico de despesas por categoria, mas pra receita e
+  // investimento — "de onde veio o dinheiro" e "pra onde foi investido",
+  // não só "pra onde foi gasto".
+  function dividirPorCategoria(tipo) {
+    const doTipo = entradasDoPeriodo.filter((e) => e.tipo === tipo);
+    const porCategoria = {};
+    for (const e of doTipo) {
+      const nome = categoriaPorId[e.categoriaId]?.nome || 'Outros';
+      porCategoria[nome] = (porCategoria[nome] || 0) + e.valor;
+    }
+    return Object.entries(porCategoria)
+      .map(([nome, valor]) => ({ nome, valor }))
+      .sort((a, b) => b.valor - a.valor);
+  }
+  const dadosReceita = useMemo(() => dividirPorCategoria('receita'), [entradasDoPeriodo, categoriaPorId]);
+  const dadosInvestimento = useMemo(() => dividirPorCategoria('investimento'), [entradasDoPeriodo, categoriaPorId]);
+
   // Orçamento por categoria: só faz sentido comparar com um mês específico
   // (o limite é mensal — comparar com "ano inteiro" distorceria a conta).
   const totalDespesaPorCategoriaId = useMemo(() => {
@@ -193,7 +210,7 @@ export function useResumoFinanceiro() {
     contasComSaldo, contasSemSaldo,
     entradasDoPeriodo, temPrevistoNoPeriodo,
     totalReceitas, totalDespesas, totalInvestimentos, saldo, percentGasta, percentInvestida,
-    dadosBarras, dadosPizza, orcamentosComGasto,
+    dadosBarras, dadosPizza, dadosReceita, dadosInvestimento, orcamentosComGasto,
     variacaoDespesa, sequenciaPositiva, maiorCategoria, maiorCategoriaPercent, maiorLancamento, percentualFixo
   };
 }

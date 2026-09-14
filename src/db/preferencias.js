@@ -19,6 +19,18 @@ export async function salvarTema(tema) {
   await salvarConfig('tema', tema);
 }
 
+// Metas de % da renda gasta/investida — comparadas com o percentual real
+// do período no Dashboard. Igual ao conceito que já existia na planilha
+// antiga. Sem meta definida, os campos ficam null (Dashboard não mostra
+// comparação nenhuma até você definir).
+export async function salvarMetas(metas) {
+  await salvarConfig('metas', JSON.stringify(metas));
+}
+
+export function metasPadrao() {
+  return { percentGastaMeta: null, percentInvestidaMeta: null };
+}
+
 // Perfil local — nome + emoji como avatar. Sem foto/upload e sem login:
 // login com Google fica pra Fase 2, quando houver servidor de verdade.
 export async function salvarPerfil(perfil) {
