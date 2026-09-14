@@ -9,7 +9,7 @@ import { definirPin, removerPin, pinEstaAtivo } from '../db/security';
 import { exportarBackup, baixarBackupComoArquivo, importarBackup, apagarTodosOsLancamentos } from '../db/backup';
 import { diaFechamentoEfetivo, diaVencimentoEfetivo } from '../utils/cartao';
 import { contaTemSaldoControlado, calcularSaldoConta } from '../db/saldos';
-import { formatCurrency, formatDateBR, hojeISO } from '../utils/format';
+import { formatCurrency, formatDateBR } from '../utils/format';
 import { salvarPerfil, salvarTema, perfilPadrao } from '../db/preferencias';
 import { useAuth } from '../firebase/authContext';
 
@@ -402,7 +402,7 @@ function ConfigSaldo({ conta, entradas }) {
   const saldoAtual = useMemo(() => calcularSaldoConta(conta, entradas), [conta, entradas]);
 
   async function confirmarDefinicao() {
-    await db.contas.update(conta.id, { saldoInicial: valorInicial, saldoInicialData: hojeISO() });
+    await db.contas.update(conta.id, { saldoInicial: valorInicial, saldoInicialData: new Date().toISOString() });
     setDefinindo(false);
   }
 
@@ -411,7 +411,7 @@ function ConfigSaldo({ conta, entradas }) {
   }
 
   async function recalibrar() {
-    await db.contas.update(conta.id, { saldoInicial: valorRecalibrar, saldoInicialData: hojeISO() });
+    await db.contas.update(conta.id, { saldoInicial: valorRecalibrar, saldoInicialData: new Date().toISOString() });
     setValorRecalibrar(0);
   }
 
@@ -442,7 +442,7 @@ function ConfigSaldo({ conta, entradas }) {
         <strong style={{ color: saldoAtual >= 0 ? 'var(--green)' : 'var(--red)' }}>{formatCurrency(saldoAtual)}</strong>
       </div>
       <p className="repeticao-explicacao">
-        Calculado a partir do saldo informado em {formatDateBR(conta.saldoInicialData)}, somando o que entrou e
+        Calculado a partir do saldo informado em {formatDateBR(conta.saldoInicialData?.slice(0, 10))}, somando o que entrou e
         saiu depois. Se não bater com a realidade, digite o valor exato que está no banco hoje (não a diferença):
       </p>
       <div className="field">

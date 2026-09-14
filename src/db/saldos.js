@@ -17,7 +17,15 @@ export function calcularSaldoConta(conta, entradas) {
 
   let saldo = conta.saldoInicial || 0;
   for (const e of entradas) {
-    if (e.data < conta.saldoInicialData) continue;
+    // Usa o momento em que o lançamento foi CRIADO (criadoEm), não a data
+    // que ele representa (e.data) — importante quando você recalibra o
+    // saldo depois de já ter lançado algo no mesmo dia: aquele lançamento
+    // já estava refletido no valor real que você acabou de digitar, então
+    // não pode ser somado de novo por cima. Só compara por data (e.data)
+    // como último recurso, pra ocorrências previstas/projetadas, que não
+    // têm criadoEm por nunca terem sido de fato gravadas.
+    const momento = e.criadoEm || e.data;
+    if (momento < conta.saldoInicialData) continue;
 
     if (e.tipo === 'transferencia') {
       if (e.contaId === conta.id) saldo -= e.valor; // saiu desta conta
