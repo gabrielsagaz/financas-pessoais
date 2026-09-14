@@ -979,6 +979,11 @@ input:focus, select:focus {
 .fatura-tag-positivo { background: rgba(28, 138, 75, 0.14); color: var(--green); }
 .fatura-tag-negativo { background: rgba(255, 69, 58, 0.14); color: var(--red); }
 
+.aviso-fatura-box { display: flex; flex-direction: column; gap: 8px; border: 1px solid rgba(255, 159, 10, 0.35); }
+.aviso-fatura { margin: 0; font-size: 13.5px; color: #ff9f0a; }
+.aviso-fatura-atrasada { color: var(--red); }
+.aviso-fatura strong { color: var(--text); }
+
 .fatura-pagamento-linha {
   display: flex;
   justify-content: space-between;

@@ -7,6 +7,56 @@ import { IconCard } from './Icons';
 import MoneyInput from './MoneyInput';
 import ConfirmDialog from './ConfirmDialog';
 
+const DIAS_ANTECEDENCIA_AVISO = 5;
+
+// 'YYYY-MM-DD' → dias entre duas datas (positivo = b é depois de a). Evita
+// `new Date('YYYY-MM-DD')`, que pode sofrer deslocamento de fuso horário —
+// usa Date.UTC com os componentes já separados, sem depender do fuso local.
+function diasEntre(dataA, dataB) {
+  const [a1, a2, a3] = dataA.split('-').map(Number);
+  const [b1, b2, b3] = dataB.split('-').map(Number);
+  const ta = Date.UTC(a1, a2 - 1, a3);
+  const tb = Date.UTC(b1, b2 - 1, b3);
+  return Math.round((tb - ta) / 86400000);
+}
+
+// Agrupa as despesas em crédito de UM cartão em faturas (por mês de
+// fechamento), soma os pagamentos já registrados pra cada uma. Extraído do
+// componente pra poder ser chamado tanto pela lista normal de faturas
+// quanto pelo aviso de vencimento no topo (que precisa olhar todos os
+// cartões de uma vez, antes de saber qual vai renderizar o quê).
+function calcularFaturasDoCartao(cartao, entradas, entradasReais) {
+  const doCartao = entradas.filter(
+    (e) => e.contaId === cartao.id && e.tipo === 'despesa' && formaPagamentoEfetiva(e, cartao) === 'credito'
+  );
+  const grupos = {};
+  for (const e of doCartao) {
+    const { anoFatura, mesFatura, dataVencimento } = calcularFaturaDoLancamento(e.data, diaFechamentoEfetivo(cartao), diaVencimentoEfetivo(cartao));
+    const chave = `${anoFatura}-${String(mesFatura).padStart(2, '0')}`;
+    if (!grupos[chave]) grupos[chave] = { chave, anoFatura, mesFatura, dataVencimento, total: 0, temPrevisto: false, pago: 0 };
+    grupos[chave].total += e.valor;
+    if (e.previsto) grupos[chave].temPrevisto = true;
+  }
+
+  // Pagamentos: transferências (sem conta de destino — o "destino" é só
+  // abater a fatura, não outra conta de verdade) marcadas com o cartão e
+  // a fatura a que se referem (ver `pagamentoFaturaChave`, gravado ao
+  // clicar em "Pagar" abaixo).
+  const pagamentos = entradasReais.filter(
+    (e) => e.tipo === 'transferencia' && e.cartaoId === cartao.id && e.pagamentoFaturaChave
+  );
+  for (const p of pagamentos) {
+    const chave = p.pagamentoFaturaChave;
+    if (!grupos[chave]) {
+      const [anoStr, mesStr] = chave.split('-');
+      grupos[chave] = { chave, anoFatura: Number(anoStr), mesFatura: Number(mesStr), dataVencimento: null, total: 0, temPrevisto: false, pago: 0 };
+    }
+    grupos[chave].pago += p.valor;
+  }
+
+  return Object.values(grupos).sort((a, b) => (a.chave < b.chave ? -1 : 1));
+}
+
 // Embutido na tela de Resumo, abaixo do saldo por conta — não é mais uma
 // tela própria (por isso não busca os próprios dados: recebe tudo já
 // carregado do Resumo, que já precisa dessas mesmas listas).
@@ -36,12 +86,46 @@ export default function Faturas({ contas, entradas, recorrencias, excecoesValor 
     return contas.filter((c) => idsComCredito.has(c.id));
   }, [contas, todasEntradas]);
 
+  // Faturas não pagas, reais (não previstas), vencendo em até
+  // DIAS_ANTECEDENCIA_AVISO dias — ou já vencidas. Olha todos os cartões de
+  // uma vez, pra virar um aviso único no topo (não um por cartão).
+  const faturasProximasOuAtrasadas = useMemo(() => {
+    const hoje = hojeISO();
+    const avisos = [];
+    for (const cartao of cartoes) {
+      const faturas = calcularFaturasDoCartao(cartao, todasEntradas, entradas);
+      for (const f of faturas) {
+        if (f.temPrevisto || !f.dataVencimento) continue;
+        const restante = f.total - f.pago;
+        if (restante <= 0) continue;
+        const dias = diasEntre(hoje, f.dataVencimento);
+        if (dias <= DIAS_ANTECEDENCIA_AVISO) avisos.push({ cartao, fatura: f, dias, restante });
+      }
+    }
+    return avisos.sort((a, b) => a.dias - b.dias);
+  }, [cartoes, todasEntradas, entradas]);
+
   // Nada lançado em crédito ainda — não mostra a seção (mantém o Resumo
   // limpo em vez de exibir um "vazio" permanente pra quem nunca usa isso).
   if (cartoes.length === 0) return null;
 
   return (
     <>
+      {faturasProximasOuAtrasadas.length > 0 && (
+        <div className="chart-box aviso-fatura-box">
+          {faturasProximasOuAtrasadas.map(({ cartao, fatura: f, dias, restante }) => (
+            <p key={`${cartao.id}-${f.chave}`} className={`aviso-fatura ${dias < 0 ? 'aviso-fatura-atrasada' : ''}`}>
+              <strong>{cartao.nome}</strong> — {formatCurrency(restante)}{' '}
+              {dias < 0
+                ? `venceu há ${Math.abs(dias)} ${Math.abs(dias) === 1 ? 'dia' : 'dias'} (${formatDateBR(f.dataVencimento)})`
+                : dias === 0
+                  ? 'vence hoje'
+                  : `vence em ${dias} ${dias === 1 ? 'dia' : 'dias'} (${formatDateBR(f.dataVencimento)})`}
+            </p>
+          ))}
+        </div>
+      )}
+
       <h2>Faturas</h2>
       {cartoes.map((cartao) => (
         <FaturasDoCartao
@@ -62,37 +146,10 @@ function FaturasDoCartao({ cartao, entradas, entradasReais, contasParaPagar }) {
     return `${anoFatura}-${String(mesFatura).padStart(2, '0')}`;
   }, [cartao]);
 
-  const faturas = useMemo(() => {
-    const doCartao = entradas.filter(
-      (e) => e.contaId === cartao.id && e.tipo === 'despesa' && formaPagamentoEfetiva(e, cartao) === 'credito'
-    );
-    const grupos = {};
-    for (const e of doCartao) {
-      const { anoFatura, mesFatura, dataVencimento } = calcularFaturaDoLancamento(e.data, diaFechamentoEfetivo(cartao), diaVencimentoEfetivo(cartao));
-      const chave = `${anoFatura}-${String(mesFatura).padStart(2, '0')}`;
-      if (!grupos[chave]) grupos[chave] = { chave, anoFatura, mesFatura, dataVencimento, total: 0, temPrevisto: false, pago: 0 };
-      grupos[chave].total += e.valor;
-      if (e.previsto) grupos[chave].temPrevisto = true;
-    }
-
-    // Pagamentos: transferências (sem conta de destino — o "destino" é só
-    // abater a fatura, não outra conta de verdade) marcadas com o cartão e
-    // a fatura a que se referem (ver `pagamentoFaturaChave`, gravado ao
-    // clicar em "Pagar" abaixo).
-    const pagamentos = entradasReais.filter(
-      (e) => e.tipo === 'transferencia' && e.cartaoId === cartao.id && e.pagamentoFaturaChave
-    );
-    for (const p of pagamentos) {
-      const chave = p.pagamentoFaturaChave;
-      if (!grupos[chave]) {
-        const [anoStr, mesStr] = chave.split('-');
-        grupos[chave] = { chave, anoFatura: Number(anoStr), mesFatura: Number(mesStr), dataVencimento: null, total: 0, temPrevisto: false, pago: 0 };
-      }
-      grupos[chave].pago += p.valor;
-    }
-
-    return Object.values(grupos).sort((a, b) => (a.chave < b.chave ? -1 : 1));
-  }, [entradas, entradasReais, cartao]);
+  const faturas = useMemo(
+    () => calcularFaturasDoCartao(cartao, entradas, entradasReais),
+    [entradas, entradasReais, cartao]
+  );
 
   return (
     <div className="fatura-cartao-bloco">
