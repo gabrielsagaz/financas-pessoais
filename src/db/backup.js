@@ -57,18 +57,24 @@ export async function importarBackup(objetoBackup) {
 
 // Apaga só os lançamentos (entries) — mantém categorias, contas, orçamentos
 // e as recorrências cadastradas. IMPORTANTE: reposiciona o controle interno
-// `ultimaGeracao` de cada recorrência pro mês atual; sem isso, elas
-// regenerariam do zero (a partir da data de início) os mesmos lançamentos
-// que acabaram de ser apagados na próxima vez que o app for aberto.
-// Apaga TODOS os lançamentos — reais e as recorrências que os geram. Sem
-// apagar as recorrências, os lançamentos "previstos" (projetados na hora,
-// não guardados no banco) continuariam aparecendo em Histórico/Faturas/
-// Dashboard, mesmo com `entries` vazia — eles não vêm de lá, vêm de
-// projetar as recorrências pra frente.
+// Apaga TODOS os lançamentos — reais, as recorrências que os geram, e o
+// ponto de partida de saldo de cada conta. Sem isso: (a) os "previstos"
+// continuariam aparecendo, projetados na hora a partir das recorrências,
+// que não vêm de `entries`; e (b) o saldo por conta continuaria mostrando
+// o valor de "Definir saldo atual"/recalibração, que fica guardado direto
+// na conta (`saldoInicial`), não como um lançamento — apagar só `entries`
+// nunca tocaria nele.
 export async function apagarTodosOsLancamentos() {
-  await db.transaction('rw', db.entries, db.recorrencias, db.excecoesValor, async () => {
+  await db.transaction('rw', db.entries, db.recorrencias, db.excecoesValor, db.contas, async () => {
     await db.entries.clear();
     await db.recorrencias.clear();
     await db.excecoesValor.clear();
+
+    const contas = await db.contas.toArray();
+    for (const conta of contas) {
+      if (conta.saldoInicialData) {
+        await db.contas.update(conta.id, { saldoInicial: 0, saldoInicialData: null });
+      }
+    }
   });
 }

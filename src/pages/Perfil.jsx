@@ -279,7 +279,7 @@ function DadosBackup() {
       <div className="dados-backup-linha">
         <div>
           <strong>Apagar todos os lançamentos</strong>
-          <p className="dados-backup-descricao">Remove permanentemente todo o histórico de receitas, despesas e investimentos, incluindo lançamentos fixos/recorrentes. Exporte um backup antes, se quiser guardar esses dados.</p>
+          <p className="dados-backup-descricao">Remove permanentemente todo o histórico de receitas, despesas e investimentos, incluindo lançamentos fixos/recorrentes, e reseta o saldo definido em cada conta. Exporte um backup antes, se quiser guardar esses dados.</p>
         </div>
         <button type="button" className="btn-danger" onClick={() => setConfirmandoReset(true)}>Apagar tudo</button>
       </div>
