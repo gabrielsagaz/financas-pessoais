@@ -921,9 +921,6 @@ input:focus, select:focus {
 .metrica-valor { font-size: 15px; font-weight: 700; }
 .metrica-neutra { color: var(--text); font-weight: 600; font-size: 14px; }
 
-.saldo-contas-lista { display: flex; flex-direction: column; gap: 10px; }
-.saldo-conta-linha { display: flex; justify-content: space-between; align-items: center; font-size: 14.5px; }
-.saldo-conta-linha:not(:last-child) { padding-bottom: 10px; border-bottom: 1px solid var(--hairline); }
 
 .saldo-inline { font-size: 13px; font-weight: 600; white-space: nowrap; }
 
@@ -968,6 +965,8 @@ input:focus, select:focus {
 .fatura-tag-fechada { background: var(--hairline); color: var(--text-tertiary); }
 .fatura-tag-paga { background: rgba(28, 138, 75, 0.14); color: var(--green); }
 .fatura-tag-parcial { background: rgba(255, 159, 10, 0.16); color: #ff9f0a; }
+.fatura-tag-positivo { background: rgba(28, 138, 75, 0.14); color: var(--green); }
+.fatura-tag-negativo { background: rgba(255, 69, 58, 0.14); color: var(--red); }
 
 .fatura-pagamento-linha {
   display: flex;

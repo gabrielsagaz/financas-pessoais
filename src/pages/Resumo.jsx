@@ -297,22 +297,6 @@ export default function Resumo({ onAbrirFaturas }) {
         </>
       )}
 
-      {contasComSaldo.length > 0 && (
-        <>
-          <h2>Saldo por conta</h2>
-          <div className="chart-box saldo-contas-lista">
-            {contasComSaldo.map((c) => (
-              <div key={c.id} className="saldo-conta-linha">
-                <span>{c.nome}</span>
-                <strong style={{ color: c.saldoAtual >= 0 ? TIPOS.receita.cor : TIPOS.despesa.cor }}>
-                  {formatCurrency(c.saldoAtual)}
-                </strong>
-              </div>
-            ))}
-          </div>
-        </>
-      )}
-
       <h2>Receitas x Despesas x Investimentos — {ano}</h2>
       <div className="chart-box">
         <ResponsiveContainer width="100%" height={260}>
@@ -328,6 +312,32 @@ export default function Resumo({ onAbrirFaturas }) {
           </ComposedChart>
         </ResponsiveContainer>
       </div>
+
+      {contasComSaldo.length > 0 && (
+        <>
+          <h2>Saldo por conta</h2>
+          <div className="chart-box fatura-lista">
+            {contasComSaldo.map((c) => {
+              const positivo = c.saldoAtual >= 0;
+              return (
+                <div key={c.id} className="fatura-item-bloco">
+                  <div className="fatura-item">
+                    <div className="fatura-mes">{c.nome}</div>
+                    <div className="fatura-direita">
+                      <span className={`fatura-tag ${positivo ? 'fatura-tag-positivo' : 'fatura-tag-negativo'}`}>
+                        {positivo ? 'Positivo' : 'Negativo'}
+                      </span>
+                      <strong style={{ color: positivo ? TIPOS.receita.cor : TIPOS.despesa.cor }}>
+                        {formatCurrency(c.saldoAtual)}
+                      </strong>
+                    </div>
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        </>
+      )}
 
       <h2>Divisão de despesas por categoria</h2>
       {dadosPizza.length === 0 ? (
