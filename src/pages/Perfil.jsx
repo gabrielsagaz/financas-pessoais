@@ -11,6 +11,7 @@ import { diaFechamentoEfetivo, diaVencimentoEfetivo } from '../utils/cartao';
 import { contaTemSaldoControlado, calcularSaldoConta } from '../db/saldos';
 import { formatCurrency, formatDateBR, hojeISO } from '../utils/format';
 import { salvarPerfil, salvarTema, perfilPadrao, salvarConfig } from '../db/preferencias';
+import { classificarCategoriasExistentes } from '../utils/classificacao';
 import { useAuth } from '../firebase/authContext';
 
 const EMOJIS_AVATAR = ['🙂', '😎', '🧑', '👩', '👨', '🐱', '🐶', '🦊', '🐼', '🌟', '💰', '📈'];
@@ -510,10 +511,22 @@ function ListaDividas() {
 function MetasCascata() {
   const registro = useLiveQuery(() => db.configuracoes.where('chave').equals('metasCascata').first(), []);
   const metas = registro ? JSON.parse(registro.valor) : { mesesReserva: 6, percentInvestimento: 10 };
+  const [resultadoMigracao, setResultadoMigracao] = useState(null);
+  const [migrando, setMigrando] = useState(false);
 
   async function salvar(campo, valor) {
     const numero = Math.max(0, Number(valor) || 0);
     await salvarConfig('metasCascata', JSON.stringify({ ...metas, [campo]: numero }));
+  }
+
+  async function aplicarClassificacaoPadrao() {
+    setMigrando(true);
+    try {
+      const resultado = await classificarCategoriasExistentes();
+      setResultadoMigracao(resultado);
+    } finally {
+      setMigrando(false);
+    }
   }
 
   return (
@@ -528,6 +541,17 @@ function MetasCascata() {
           <input type="number" min="0" max="100" value={metas.percentInvestimento} onChange={(e) => salvar('percentInvestimento', e.target.value)} style={{ width: 64, textAlign: 'center' }} />
         </div>
       </div>
+
+      <button type="button" className="botao-link" onClick={aplicarClassificacaoPadrao} disabled={migrando}>
+        {migrando ? 'Aplicando...' : 'Classificar categorias existentes automaticamente'}
+      </button>
+      {resultadoMigracao && (
+        <p className="repeticao-explicacao">
+          {resultadoMigracao.categoriasAtualizadas === 0 && resultadoMigracao.subcategoriasAtualizadas === 0
+            ? 'Nada pra classificar — categorias já classificadas ou sem nome igual a nenhuma categoria padrão.'
+            : `${resultadoMigracao.categoriasAtualizadas} categoria(s) e ${resultadoMigracao.subcategoriasAtualizadas} subcategoria(s) classificadas. Confira em Categorias.`}
+        </p>
+      )}
     </div>
   );
 }
