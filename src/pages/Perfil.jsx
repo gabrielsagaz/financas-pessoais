@@ -423,13 +423,13 @@ function ConfigSaldo({ conta, entradas }) {
             Definir saldo atual
           </button>
         ) : (
-          <div className="config-cartao-dias">
+          <>
             <div className="field">
               <label>Saldo de hoje</label>
               <MoneyInput value={valorInicial} onChange={setValorInicial} autoFocus />
             </div>
-            <button type="button" className="btn-confirm" onClick={confirmarDefinicao}>Salvar saldo</button>
-          </div>
+            <button type="button" className="btn-confirm" style={{ width: '100%' }} onClick={confirmarDefinicao}>Salvar saldo</button>
+          </>
         )}
       </div>
     );
@@ -445,13 +445,11 @@ function ConfigSaldo({ conta, entradas }) {
         Calculado a partir do saldo informado em {formatDateBR(conta.saldoInicialData)}, somando o que entrou e
         saiu depois. Se não bater com a realidade, recalibre com o saldo de hoje:
       </p>
-      <div className="config-cartao-dias">
-        <div className="field">
-          <label>Recalibrar saldo (usa a data de hoje)</label>
-          <MoneyInput value={valorRecalibrar} onChange={setValorRecalibrar} />
-        </div>
-        <button type="button" className="btn-cancel" onClick={recalibrar}>Recalibrar</button>
+      <div className="field">
+        <label>Recalibrar saldo (usa a data de hoje)</label>
+        <MoneyInput value={valorRecalibrar} onChange={setValorRecalibrar} />
       </div>
+      <button type="button" className="btn-cancel" style={{ width: '100%' }} onClick={recalibrar}>Recalibrar</button>
       <button type="button" className="botao-link botao-link-discreto" onClick={pararDeAcompanhar}>
         Parar de acompanhar saldo desta conta
       </button>
