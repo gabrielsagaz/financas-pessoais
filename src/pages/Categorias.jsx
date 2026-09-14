@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import { useLiveQuery } from '../db/useLiveQuery';
 import { db } from '../db/db';
-import { TIPOS } from '../db/defaultData';
+import { TIPOS, CLASSIFICACOES } from '../db/defaultData';
 import ConfirmDialog from '../components/ConfirmDialog';
 import { IconTrash, IconChevron } from '../components/Icons';
 import MoneyInput from '../components/MoneyInput';
@@ -101,7 +101,8 @@ function ListaCategorias({ tipo }) {
 
           {expandidaId === cat.id && (
             <>
-              <Subcategorias categoriaId={cat.id} onExcluir={(id) => setExcluindo({ tipo: 'subcategoria', id })} />
+              {tipo === 'despesa' && <ClassificacaoCategoria categoria={cat} />}
+              <Subcategorias categoriaId={cat.id} categoriaClassificacao={cat.classificacao} mostrarClassificacao={tipo === 'despesa'} onExcluir={(id) => setExcluindo({ tipo: 'subcategoria', id })} />
               {tipo === 'despesa' && <OrcamentoCategoria categoriaId={cat.id} />}
             </>
           )}
@@ -130,7 +131,7 @@ function ListaCategorias({ tipo }) {
   );
 }
 
-function Subcategorias({ categoriaId, onExcluir }) {
+function Subcategorias({ categoriaId, categoriaClassificacao, mostrarClassificacao, onExcluir }) {
   const subcategorias = useLiveQuery(
     () => db.subcategorias.where('categoriaId').equals(categoriaId).sortBy('ordem'),
     [categoriaId]
@@ -149,11 +150,30 @@ function Subcategorias({ categoriaId, onExcluir }) {
     await db.subcategorias.update(sub.id, { nome: novoValor.trim() });
   }
 
+  async function salvarClassificacao(sub, valor) {
+    await db.subcategorias.update(sub.id, { classificacao: valor || null });
+  }
+
   return (
     <div className="subcategorias-lista">
       {subcategorias.map((sub) => (
         <div key={sub.id} className="subcategoria-item">
           <input value={sub.nome} onChange={(e) => renomear(sub, e.target.value)} />
+          {mostrarClassificacao && (
+            <select
+              className="select-classificacao"
+              value={sub.classificacao || ''}
+              onChange={(e) => salvarClassificacao(sub, e.target.value)}
+              title="Sobrescreve a classificação da categoria só nesta subcategoria"
+            >
+              <option value="">
+                Herdar ({CLASSIFICACOES[categoriaClassificacao]?.label || 'sem classificação'})
+              </option>
+              {Object.entries(CLASSIFICACOES).map(([key, info]) => (
+                <option key={key} value={key}>{info.label}</option>
+              ))}
+            </select>
+          )}
           <button type="button" className="btn-excluir-mini" onClick={() => onExcluir(sub.id)}><IconTrash /></button>
         </div>
       ))}
@@ -167,6 +187,27 @@ function Subcategorias({ categoriaId, onExcluir }) {
         />
         <button type="button" className="btn-confirm" onClick={adicionar}>+</button>
       </div>
+    </div>
+  );
+}
+
+// Classificação da Fase 3 (planejamento em cascata) — Necessidade, Desejo,
+// Dívida ou Investimento (ex: Educação). Só aparece pra despesas; receita
+// não é gasto, e investimento já é implicitamente 'investimento' pelo tipo.
+function ClassificacaoCategoria({ categoria }) {
+  async function salvar(valor) {
+    await db.categorias.update(categoria.id, { classificacao: valor || null });
+  }
+
+  return (
+    <div className="field classificacao-categoria">
+      <label>Classificação (planejamento)</label>
+      <select value={categoria.classificacao || ''} onChange={(e) => salvar(e.target.value)}>
+        <option value="">Sem classificação</option>
+        {Object.entries(CLASSIFICACOES).map(([key, info]) => (
+          <option key={key} value={key}>{info.label}</option>
+        ))}
+      </select>
     </div>
   );
 }

@@ -687,6 +687,16 @@ input:focus, select:focus {
   font-size: 14px;
 }
 
+.select-classificacao {
+  flex-shrink: 0;
+  width: auto;
+  max-width: 118px;
+  font-size: 12.5px;
+  padding: 8px 6px;
+}
+
+.classificacao-categoria { padding: 0 12px 10px; }
+
 .lista-contas {
   background: var(--surface);
   border: 1px solid var(--hairline);

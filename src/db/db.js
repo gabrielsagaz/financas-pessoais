@@ -44,6 +44,7 @@ export const db = {
   orcamentos: criarTabela('orcamentos'),
   configuracoes: criarTabela('configuracoes'),
   excecoesValor: criarTabela('excecoesValor'),
+  dividas: criarTabela('dividas'),
 
   // Best-effort, NÃO atômico: o Dexie garantia que, se algo no meio falhasse,
   // nada era salvo. O Firestore não oferece isso pra sequências arbitrárias
@@ -76,15 +77,21 @@ async function seedCategoriasEContas() {
   const categoriaIdPorTipoNome = {};
   for (let i = 0; i < CATEGORIAS_PADRAO.length; i++) {
     const cat = CATEGORIAS_PADRAO[i];
-    const categoriaId = await db.categorias.add({ tipo: cat.tipo, nome: cat.nome, ordem: i });
+    const categoriaId = await db.categorias.add({
+      tipo: cat.tipo,
+      nome: cat.nome,
+      ordem: i,
+      classificacao: cat.classificacao ?? null
+    });
     categoriaIdPorTipoNome[`${cat.tipo}:${cat.nome}`] = categoriaId;
 
     for (let j = 0; j < cat.subcategorias.length; j++) {
-      await db.subcategorias.add({
-        categoriaId,
-        nome: cat.subcategorias[j],
-        ordem: j
-      });
+      // Subcategoria pode ser uma string simples (herda a classificação da
+      // categoria) ou um objeto { nome, classificacao } (sobrescreve).
+      const sub = cat.subcategorias[j];
+      const nome = typeof sub === 'string' ? sub : sub.nome;
+      const classificacao = typeof sub === 'string' ? null : (sub.classificacao ?? null);
+      await db.subcategorias.add({ categoriaId, nome, ordem: j, classificacao });
     }
   }
 

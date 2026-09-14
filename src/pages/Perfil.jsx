@@ -10,7 +10,7 @@ import { exportarBackup, baixarBackupComoArquivo, importarBackup, apagarTodosOsL
 import { diaFechamentoEfetivo, diaVencimentoEfetivo } from '../utils/cartao';
 import { contaTemSaldoControlado, calcularSaldoConta } from '../db/saldos';
 import { formatCurrency, formatDateBR, hojeISO } from '../utils/format';
-import { salvarPerfil, salvarTema, perfilPadrao } from '../db/preferencias';
+import { salvarPerfil, salvarTema, perfilPadrao, salvarConfig } from '../db/preferencias';
 import { useAuth } from '../firebase/authContext';
 
 const EMOJIS_AVATAR = ['🙂', '😎', '🧑', '👩', '👨', '🐱', '🐶', '🦊', '🐼', '🌟', '💰', '📈'];
@@ -33,6 +33,12 @@ export default function Perfil({ onVoltar }) {
 
       <h2 style={{ marginTop: 32 }}>Contas</h2>
       <ListaContas />
+
+      <h2 style={{ marginTop: 32 }}>Dívidas</h2>
+      <ListaDividas />
+
+      <h2 style={{ marginTop: 32 }}>Planejamento</h2>
+      <MetasCascata />
 
       <h2 style={{ marginTop: 32 }}>Segurança</h2>
       <Seguranca />
@@ -360,6 +366,7 @@ function ListaContas() {
               <>
                 <ConfigCartao conta={conta} />
                 <ConfigSaldo conta={conta} entradas={entradas} />
+                <ConfigReserva conta={conta} />
               </>
             )}
           </div>
@@ -387,12 +394,171 @@ function ListaContas() {
   );
 }
 
+// Dívidas (Fase 3 — planejamento em cascata): valor total devido + parcela
+// mensal. Não gera lançamento nenhum sozinha — é só o registro que o
+// Planejamento usa pra saber quanto reservar todo mês. Quando o valor pago
+// chega ao total, a dívida fica quitada e some da cascata automaticamente
+// (sem precisar excluir — o histórico continua ali se quiser conferir).
+function ListaDividas() {
+  const dividas = useLiveQuery(() => db.dividas.toArray(), []) || [];
+  const [novoNome, setNovoNome] = useState('');
+  const [expandidaId, setExpandidaId] = useState(null);
+  const [excluindoId, setExcluindoId] = useState(null);
+
+  async function adicionar() {
+    const nome = novoNome.trim();
+    if (!nome) return;
+    await db.dividas.add({ nome, valorTotal: 0, valorPago: 0, parcelaMensal: 0, criadoEm: new Date().toISOString() });
+    setNovoNome('');
+  }
+
+  async function renomear(divida, novoValor) {
+    if (!novoValor.trim()) return;
+    await db.dividas.update(divida.id, { nome: novoValor.trim() });
+  }
+
+  async function salvarCampo(divida, campo, valor) {
+    await db.dividas.update(divida.id, { [campo]: valor });
+  }
+
+  async function marcarParcelaPaga(divida) {
+    const novoPago = Math.min(divida.valorTotal, divida.valorPago + divida.parcelaMensal);
+    await db.dividas.update(divida.id, { valorPago: novoPago });
+  }
+
+  async function confirmarExclusao() {
+    await db.dividas.delete(excluindoId);
+    setExcluindoId(null);
+  }
+
+  return (
+    <div className="lista-contas">
+      {dividas.map((divida) => {
+        const restante = Math.max(0, divida.valorTotal - divida.valorPago);
+        const quitada = divida.valorTotal > 0 && restante === 0;
+        return (
+          <div key={divida.id} className="categoria-card">
+            <div className="categoria-header" onClick={() => setExpandidaId(expandidaId === divida.id ? null : divida.id)}>
+              <input
+                className="categoria-nome-input"
+                value={divida.nome}
+                onClick={(e) => e.stopPropagation()}
+                onChange={(e) => renomear(divida, e.target.value)}
+              />
+              <span className="saldo-inline" style={{ color: quitada ? 'var(--green)' : 'var(--red)' }}>
+                {quitada ? 'Quitada' : formatCurrency(restante)}
+              </span>
+              <button
+                type="button"
+                className="btn-excluir-mini"
+                onClick={(e) => { e.stopPropagation(); setExcluindoId(divida.id); }}
+              >
+                <IconTrash />
+              </button>
+              <span className="expand-icon"><IconChevron open={expandidaId === divida.id} /></span>
+            </div>
+            {expandidaId === divida.id && (
+              <div className="config-cartao">
+                <div className="field">
+                  <label>Valor total devido</label>
+                  <MoneyInput value={divida.valorTotal} onChange={(v) => salvarCampo(divida, 'valorTotal', v)} />
+                </div>
+                <div className="field">
+                  <label>Parcela mensal</label>
+                  <MoneyInput value={divida.parcelaMensal} onChange={(v) => salvarCampo(divida, 'parcelaMensal', v)} />
+                </div>
+                <div className="field">
+                  <label>Já pago</label>
+                  <MoneyInput value={divida.valorPago} onChange={(v) => salvarCampo(divida, 'valorPago', v)} />
+                </div>
+                {!quitada && divida.parcelaMensal > 0 && (
+                  <button type="button" className="btn-confirm" style={{ width: '100%' }} onClick={() => marcarParcelaPaga(divida)}>
+                    Marcar parcela paga (+{formatCurrency(Math.min(divida.parcelaMensal, restante))})
+                  </button>
+                )}
+              </div>
+            )}
+          </div>
+        );
+      })}
+      <div className="inline-add">
+        <input
+          type="text"
+          placeholder="Nova dívida (ex: Financiamento do carro)..."
+          value={novoNome}
+          onChange={(e) => setNovoNome(e.target.value)}
+          onKeyDown={(e) => e.key === 'Enter' && adicionar()}
+        />
+        <button type="button" className="btn-confirm" onClick={adicionar}>Adicionar</button>
+      </div>
+
+      <ConfirmDialog
+        open={excluindoId !== null}
+        title="Excluir dívida?"
+        message="Remove o registro por completo — não afeta nenhum lançamento já feito."
+        onConfirm={confirmarExclusao}
+        onCancel={() => setExcluindoId(null)}
+      />
+    </div>
+  );
+}
+
+// Metas da cascata de planejamento (Fase 3): meses de despesas pra reserva
+// de emergência e % da renda pro aporte de investimento. Configuração rara
+// (revisar quando mudar de renda ou de meta) — o que se repete todo mês é
+// só confirmar a alocação calculada a partir dessas metas, não redefini-las.
+function MetasCascata() {
+  const registro = useLiveQuery(() => db.configuracoes.where('chave').equals('metasCascata').first(), []);
+  const metas = registro ? JSON.parse(registro.valor) : { mesesReserva: 6, percentInvestimento: 10 };
+
+  async function salvar(campo, valor) {
+    const numero = Math.max(0, Number(valor) || 0);
+    await salvarConfig('metasCascata', JSON.stringify({ ...metas, [campo]: numero }));
+  }
+
+  return (
+    <div className="config-cartao">
+      <div className="config-cartao-dias">
+        <div className="field">
+          <label>Meses de despesas na reserva de emergência</label>
+          <input type="number" min="0" value={metas.mesesReserva} onChange={(e) => salvar('mesesReserva', e.target.value)} style={{ width: 64, textAlign: 'center' }} />
+        </div>
+        <div className="field">
+          <label>% da renda pro aporte de investimento</label>
+          <input type="number" min="0" max="100" value={metas.percentInvestimento} onChange={(e) => salvar('percentInvestimento', e.target.value)} style={{ width: 64, textAlign: 'center' }} />
+        </div>
+      </div>
+    </div>
+  );
+}
+
 // Configuração de saldo controlado por conta: o usuário informa o saldo
 // "de hoje" (não recalcula pra trás a partir do histórico antigo) e, a
 // partir da data em que isso foi informado, o app soma/subtrai o que
 // entrou e saiu. Se o saldo não bater com a realidade em algum momento
 // (lançamento esquecido, etc), "recalibrar" reposiciona a referência pro
 // saldo de hoje de novo.
+// Marca esta conta como parte da reserva de emergência (Fase 3) — o saldo
+// dela entra na conta da meta de reserva no Dashboard/Planejamento. Mais de
+// uma conta pode ser marcada (soma-se o saldo de todas), pra quem divide a
+// reserva entre duas contas, por exemplo.
+function ConfigReserva({ conta }) {
+  const ativo = conta.reservaEmergencia === true;
+
+  async function alternar() {
+    await db.contas.update(conta.id, { reservaEmergencia: !ativo });
+  }
+
+  return (
+    <div className="config-cartao">
+      <label className="switch-row">
+        <span className="switch-label">Faz parte da reserva de emergência</span>
+        <span className={`switch ${ativo ? 'ativo' : ''}`} onClick={alternar} />
+      </label>
+    </div>
+  );
+}
+
 function ConfigSaldo({ conta, entradas }) {
   const ativo = contaTemSaldoControlado(conta);
   const [definindo, setDefinindo] = useState(false);
