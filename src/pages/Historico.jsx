@@ -8,6 +8,7 @@ import { calcularFaturaDoLancamento, formaPagamentoEfetiva, diaFechamentoEfetivo
 import EditableSelect from '../components/EditableSelect';
 import MoneyInput from '../components/MoneyInput';
 import ConfirmDialog from '../components/ConfirmDialog';
+import Toast from '../components/Toast';
 import { IconTrash, IconRepeat, IconCopy } from '../components/Icons';
 
 export default function Historico() {
@@ -122,7 +123,7 @@ export default function Historico() {
         </select>
       </div>
 
-      {mensagem && <p className="mensagem">{mensagem}</p>}
+      <Toast mensagem={mensagem} onFechar={() => setMensagem('')} />
 
       {rascunhoDuplicado && (
         <div className="entry-item">

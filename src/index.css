@@ -329,10 +329,16 @@ h2 {
 }
 .toast-erro { background: var(--red); color: #fff; }
 .toast svg { flex-shrink: 0; }
+.toast-saindo { animation: toast-sair 0.32s ease forwards; }
 
 @keyframes toast-entrar {
   from { opacity: 0; transform: translate(-50%, -50%) scale(0.92); }
   to { opacity: 1; transform: translate(-50%, -50%) scale(1); }
+}
+
+@keyframes toast-sair {
+  from { opacity: 1; filter: blur(0); transform: translate(-50%, -50%) scale(1); }
+  to { opacity: 0; filter: blur(6px); transform: translate(-50%, -50%) scale(1.25); }
 }
 
 .nav-item {
