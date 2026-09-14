@@ -1,3 +1,5 @@
+import { formaPagamentoEfetiva } from '../utils/cartao';
+
 // Saldo controlado por conta: opcional, por conta. Uma conta sem
 // `saldoInicialData` continua sendo só uma etiqueta informativa, como
 // sempre foi — nada muda pra quem não ativar isso.
@@ -25,7 +27,14 @@ export function calcularSaldoConta(conta, entradas) {
 
     if (e.contaId !== conta.id) continue;
     if (e.tipo === 'receita') saldo += e.valor;
-    else if (e.tipo === 'despesa' || e.tipo === 'investimento') saldo -= e.valor;
+    else if (e.tipo === 'investimento') saldo -= e.valor;
+    else if (e.tipo === 'despesa') {
+      // Despesa em crédito não sai do saldo agora — só quando a fatura é
+      // paga, o que já é o próprio lançamento de pagamento (uma
+      // transferência) reduzindo o saldo, tratado no bloco acima.
+      if (formaPagamentoEfetiva(e, conta) === 'credito') continue;
+      saldo -= e.valor;
+    }
   }
   return saldo;
 }
