@@ -86,14 +86,14 @@ function MeuPerfil() {
   }
 
   async function escolherEmoji(emoji) {
-    await salvarPerfil({ ...perfil, emoji });
+    await salvarPerfil({ ...perfil, emoji, foto: null });
     setEscolhendoEmoji(false);
   }
 
   return (
     <div className="perfil-box">
       <button type="button" className="perfil-avatar" onClick={() => setEscolhendoEmoji((v) => !v)}>
-        {perfil.emoji}
+        {perfil.foto ? <img src={perfil.foto} alt="" className="avatar-foto" /> : perfil.emoji}
       </button>
       <div className="field" style={{ flex: 1 }}>
         <label>Nome</label>
@@ -102,6 +102,11 @@ function MeuPerfil() {
 
       {escolhendoEmoji && (
         <div className="perfil-emojis">
+          {perfil.foto && (
+            <p className="repeticao-explicacao" style={{ width: '100%' }}>
+              Escolher um emoji troca a foto da sua conta Google pelo emoji.
+            </p>
+          )}
           {EMOJIS_AVATAR.map((emoji) => (
             <button key={emoji} type="button" className="perfil-emoji-opcao" onClick={() => escolherEmoji(emoji)}>
               {emoji}

@@ -26,5 +26,18 @@ export async function salvarPerfil(perfil) {
 }
 
 export function perfilPadrao() {
-  return { nome: '', emoji: '🙂' };
+  return { nome: '', emoji: '🙂', foto: null };
+}
+
+// Só roda uma vez: se ainda não existe nenhum registro de perfil (usuário
+// entrando por a primeira vez, ou tinha uma conta antiga sem esse campo),
+// usa nome e foto do Google como ponto de partida. Se o usuário já tem um
+// perfil salvo — mesmo que tenha apagado o nome de propósito —, não
+// sobrescreve nada.
+export async function seedPerfilComGoogleSeVazio(usuario) {
+  const jaExiste = await db.configuracoes.where('chave').equals('perfil').first();
+  if (jaExiste) return;
+
+  const primeiroNome = (usuario.displayName || '').trim().split(' ')[0] || '';
+  await salvarPerfil({ ...perfilPadrao(), nome: primeiroNome, foto: usuario.photoURL || null });
 }

@@ -3,6 +3,7 @@ import { useLiveQuery } from './db/useLiveQuery';
 import { iniciarBancoSeVazio, db } from './db/db';
 import { gerarLancamentosPendentes } from './db/recorrencias';
 import { pinEstaAtivo } from './db/security';
+import { seedPerfilComGoogleSeVazio } from './db/preferencias';
 import { useAuth } from './firebase/authContext';
 import BottomNav from './components/BottomNav';
 import LockScreen from './components/LockScreen';
@@ -32,12 +33,13 @@ export default function App() {
     () => (usuario ? db.configuracoes.where('chave').equals('perfil').first() : undefined),
     [usuario]
   );
-  const emojiPerfil = registroPerfil ? JSON.parse(registroPerfil.valor).emoji : null;
+  const perfilAtual = registroPerfil ? JSON.parse(registroPerfil.valor) : null;
 
   useEffect(() => {
     if (!usuario) return;
     setPronto(false);
     async function iniciar() {
+      await seedPerfilComGoogleSeVazio(usuario);
       await iniciarBancoSeVazio();
       await gerarLancamentosPendentes();
       setBloqueado(await pinEstaAtivo());
@@ -89,7 +91,11 @@ export default function App() {
     <div className="app">
       <header className="app-header">
         <button type="button" className="botao-perfil" onClick={() => setMostrandoPerfil(true)}>
-          {emojiPerfil || <IconUser size={19} />}
+          {perfilAtual?.foto ? (
+            <img src={perfilAtual.foto} alt="" className="avatar-foto" />
+          ) : (
+            perfilAtual?.emoji || <IconUser size={19} />
+          )}
         </button>
       </header>
       <main className="app-content">
