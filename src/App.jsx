@@ -16,12 +16,28 @@ import Categorias from './pages/Categorias';
 import Perfil from './pages/Perfil';
 import { IconUser } from './components/Icons';
 
+const ABAS_VALIDAS = ['resumo', 'dashboard', 'lancar', 'historico', 'categorias'];
+const CHAVE_ABA_ATIVA = 'financas:abaAtiva';
+
+function lerAbaSalva() {
+  const salva = localStorage.getItem(CHAVE_ABA_ATIVA);
+  return ABAS_VALIDAS.includes(salva) ? salva : 'resumo';
+}
+
 export default function App() {
   const { usuario, carregando } = useAuth();
-  const [abaAtiva, setAbaAtiva] = useState('resumo');
+  const [abaAtiva, setAbaAtivaState] = useState(lerAbaSalva);
   const [mostrandoPerfil, setMostrandoPerfil] = useState(false);
   const [pronto, setPronto] = useState(false);
   const [bloqueado, setBloqueado] = useState(false);
+
+  // Persiste no localStorage pra sobreviver a um F5/recarregamento — sem
+  // isso, a aba sempre voltava pra "Resumo" (o valor inicial do useState)
+  // porque um reload apaga qualquer estado só-em-memória do React.
+  function setAbaAtiva(aba) {
+    setAbaAtivaState(aba);
+    localStorage.setItem(CHAVE_ABA_ATIVA, aba);
+  }
 
   // Só busca dados depois que sabemos que existe um usuário logado — antes
   // disso, db.* nem sabe em qual /usuarios/{uid}/... ler (ver src/db/uid.js).
