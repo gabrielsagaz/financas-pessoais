@@ -510,13 +510,20 @@ function ListaDividas() {
 // só confirmar a alocação calculada a partir dessas metas, não redefini-las.
 function MetasCascata() {
   const registro = useLiveQuery(() => db.configuracoes.where('chave').equals('metasCascata').first(), []);
-  const metas = registro ? JSON.parse(registro.valor) : { mesesReserva: 6, percentInvestimento: 10 };
+  const metas = registro
+    ? JSON.parse(registro.valor)
+    : { mesesReserva: 6, percentInvestimento: 10, valorFixoInvestimento: 0, modoInvestimento: 'percent' };
   const [resultadoMigracao, setResultadoMigracao] = useState(null);
   const [migrando, setMigrando] = useState(false);
 
   async function salvar(campo, valor) {
     const numero = Math.max(0, Number(valor) || 0);
-    await salvarConfig('metasCascata', JSON.stringify({ ...metas, [campo]: numero }));
+    const mudancas = { [campo]: numero };
+    // Editar um dos dois campos de investimento já marca ele como o modo
+    // ativo — "o usuário escolhe na hora, editando o que quer usar".
+    if (campo === 'percentInvestimento') mudancas.modoInvestimento = 'percent';
+    if (campo === 'valorFixoInvestimento') mudancas.modoInvestimento = 'fixo';
+    await salvarConfig('metasCascata', JSON.stringify({ ...metas, ...mudancas }));
   }
 
   async function aplicarClassificacaoPadrao() {
@@ -537,8 +544,12 @@ function MetasCascata() {
           <input type="number" min="0" value={metas.mesesReserva} onChange={(e) => salvar('mesesReserva', e.target.value)} style={{ width: 64, textAlign: 'center' }} />
         </div>
         <div className="field">
-          <label>% da renda pro aporte de investimento</label>
+          <label>% da renda pro aporte de investimento{metas.modoInvestimento === 'percent' && ' (ativo)'}</label>
           <input type="number" min="0" max="100" value={metas.percentInvestimento} onChange={(e) => salvar('percentInvestimento', e.target.value)} style={{ width: 64, textAlign: 'center' }} />
+        </div>
+        <div className="field">
+          <label>Ou valor fixo em R$ pro aporte{metas.modoInvestimento === 'fixo' && ' (ativo)'}</label>
+          <MoneyInput value={metas.valorFixoInvestimento} onChange={(v) => salvar('valorFixoInvestimento', v)} />
         </div>
       </div>
 

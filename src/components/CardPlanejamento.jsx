@@ -9,36 +9,44 @@ import { classificacaoEfetiva } from '../utils/classificacao';
 // Cascata: a renda do mês é alocada em ORDEM de prioridade — cada balde
 // pega o que precisa (até seu limite), o resto desce pro próximo:
 //
-//   1. Reserva de emergência — até atingir a meta (meses de despesa média)
-//   2. Dívidas — soma das parcelas mensais das dívidas ainda não quitadas
-//   3. Investimento — % da RENDA (não do que sobrou), decisão já tomada
+//   1. Investimento — % da renda OU um valor fixo em R$ (o usuário escolhe
+//      qual dos dois usar, editando o campo correspondente em Perfil)
+//   2. Reserva de emergência — até atingir a meta (meses de despesa média)
+//   3. Dívidas — soma das parcelas mensais das dívidas ainda não quitadas
 //   4. Necessidade/Desejo — não geram lançamento nenhum: é o dinheiro que já
 //      fica na conta principal e é gasto normalmente, como sempre foi.
 //      "Sobra Livre" (o que resta depois de 1-3) é só a referência de
 //      quanto dá pra gastar sem tocar na reserva nem pular parcela.
 //
-// Reserva e Investimento SEMPRE tiram o valor cheio calculado, mesmo que a
-// soma ultrapasse a renda do mês — a Sobra Livre fica negativa nesse caso,
-// e o card avisa. Capar silenciosamente escondia justamente o problema que
-// esse card existe pra mostrar.
+// Cada balde é CAPADO pelo que sobrou do anterior — é uma cascata de
+// verdade, não três cálculos independentes contra a renda cheia. Só o
+// Investimento pode "faltar renda" (se for valor fixo maior que a renda do
+// mês): nesse caso os baldes seguintes zeram e o card avisa.
 // ---------------------------------------------------------------------------
 
-function calcularCascata({ renda, reservaAtual, mesesReserva, mediaDespesaMensal, dividasAtivas, percentInvestimento }) {
+function calcularCascata({ renda, modoInvestimento, percentInvestimento, valorFixoInvestimento, reservaAtual, mesesReserva, mediaDespesaMensal, dividasAtivas }) {
+  const aporteInvestimento = modoInvestimento === 'fixo' ? valorFixoInvestimento : renda * (percentInvestimento / 100);
+  const restanteAposInvestimento = Math.max(0, renda - aporteInvestimento);
+  const investimentoEstourouRenda = aporteInvestimento > renda;
+
   const metaReserva = mesesReserva * mediaDespesaMensal;
   const faltanteReserva = Math.max(0, metaReserva - reservaAtual);
-  const aporteReserva = Math.min(renda, faltanteReserva);
+  const aporteReserva = Math.min(restanteAposInvestimento, faltanteReserva);
+  const restanteAposReserva = restanteAposInvestimento - aporteReserva;
 
-  const pagamentoDividas = dividasAtivas.reduce((soma, d) => soma + Math.min(d.parcelaMensal, d.valorTotal - d.valorPago), 0);
-  const aporteInvestimento = renda * (percentInvestimento / 100);
-  const sobraLivre = renda - aporteReserva - pagamentoDividas - aporteInvestimento;
+  const totalParcelas = dividasAtivas.reduce((soma, d) => soma + Math.min(d.parcelaMensal, d.valorTotal - d.valorPago), 0);
+  const pagamentoDividas = Math.min(restanteAposReserva, totalParcelas);
+  const sobraLivre = restanteAposReserva - pagamentoDividas;
 
-  return { metaReserva, faltanteReserva, aporteReserva, pagamentoDividas, aporteInvestimento, sobraLivre };
+  return { metaReserva, faltanteReserva, aporteReserva, pagamentoDividas, aporteInvestimento, sobraLivre, investimentoEstourouRenda };
 }
 
 export default function CardPlanejamento({ mes, renda, entradas, categoriaPorId, contas }) {
   const dividasTodas = useLiveQuery(() => db.dividas.toArray(), []) || [];
   const registroMetas = useLiveQuery(() => db.configuracoes.where('chave').equals('metasCascata').first(), []);
-  const metas = registroMetas ? JSON.parse(registroMetas.valor) : { mesesReserva: 6, percentInvestimento: 10 };
+  const metas = registroMetas
+    ? JSON.parse(registroMetas.valor)
+    : { mesesReserva: 6, percentInvestimento: 10, valorFixoInvestimento: 0, modoInvestimento: 'percent' };
 
   const [confirmando, setConfirmando] = useState(false);
   const [contaOrigemId, setContaOrigemId] = useState(null);
@@ -79,11 +87,13 @@ export default function CardPlanejamento({ mes, renda, entradas, categoriaPorId,
   const cascata = useMemo(
     () => calcularCascata({
       renda,
+      modoInvestimento: metas.modoInvestimento,
+      percentInvestimento: metas.percentInvestimento,
+      valorFixoInvestimento: metas.valorFixoInvestimento,
       reservaAtual,
       mesesReserva: metas.mesesReserva,
       mediaDespesaMensal,
-      dividasAtivas,
-      percentInvestimento: metas.percentInvestimento
+      dividasAtivas
     }),
     [renda, reservaAtual, metas, mediaDespesaMensal, dividasAtivas]
   );
@@ -161,14 +171,20 @@ export default function CardPlanejamento({ mes, renda, entradas, categoriaPorId,
     return <p className="vazio">Ainda faltam meses de histórico pra calcular uma média de despesa confiável (tem {mesesComDados}).</p>;
   }
 
-  const deficit = cascata.sobraLivre < 0;
-
   return (
     <div className="chart-box planejamento-box">
       <div className="planejamento-linha">
         <span>Renda do mês</span>
         <strong>{formatCurrency(renda)}</strong>
       </div>
+
+      <div className="planejamento-linha">
+        <span>
+          Investimento ({metas.modoInvestimento === 'fixo' ? 'valor fixo' : `${metas.percentInvestimento}% da renda`})
+        </span>
+        <strong>−{formatCurrency(cascata.aporteInvestimento)}</strong>
+      </div>
+
       <div className="planejamento-linha">
         <span>
           Reserva de emergência
@@ -187,19 +203,15 @@ export default function CardPlanejamento({ mes, renda, entradas, categoriaPorId,
         </div>
       )}
 
-      <div className="planejamento-linha">
-        <span>Investimento ({metas.percentInvestimento}% da renda)</span>
-        <strong>−{formatCurrency(cascata.aporteInvestimento)}</strong>
-      </div>
-
       <div className="planejamento-linha planejamento-linha-final">
         <span>Sobra Livre</span>
-        <strong style={{ color: deficit ? 'var(--red)' : 'var(--green)' }}>{formatCurrency(cascata.sobraLivre)}</strong>
+        <strong style={{ color: 'var(--green)' }}>{formatCurrency(cascata.sobraLivre)}</strong>
       </div>
 
-      {deficit ? (
+      {cascata.investimentoEstourouRenda ? (
         <p className="aviso-fatura aviso-fatura-atrasada" style={{ margin: 0 }}>
-          A renda do mês não cobre Reserva + Dívidas + Investimento — falta {formatCurrency(Math.abs(cascata.sobraLivre))}.
+          O valor fixo de investimento ({formatCurrency(cascata.aporteInvestimento)}) é maior que a renda do mês —
+          não sobra nada pra Reserva, Dívidas ou Sobra Livre.
         </p>
       ) : cascata.sobraLivre < mediaNecessidadeMensal && (
         <p className="aviso-fatura" style={{ margin: 0 }}>
