@@ -9,7 +9,7 @@ import { definirPin, removerPin, pinEstaAtivo } from '../db/security';
 import { exportarBackup, baixarBackupComoArquivo, importarBackup, apagarTodosOsLancamentos } from '../db/backup';
 import { diaFechamentoEfetivo, diaVencimentoEfetivo } from '../utils/cartao';
 import { contaTemSaldoControlado, calcularSaldoConta } from '../db/saldos';
-import { formatCurrency, formatDateBR } from '../utils/format';
+import { formatCurrency, formatDateBR, hojeISO } from '../utils/format';
 import { salvarPerfil, salvarTema, perfilPadrao } from '../db/preferencias';
 import { useAuth } from '../firebase/authContext';
 
@@ -411,7 +411,27 @@ function ConfigSaldo({ conta, entradas }) {
   }
 
   async function recalibrar() {
-    await db.contas.update(conta.id, { saldoInicial: valorRecalibrar, saldoInicialData: new Date().toISOString() });
+    const diferenca = Math.round((valorRecalibrar - saldoAtual) * 100) / 100;
+    if (diferenca !== 0) {
+      // Cria um lançamento de verdade com a diferença — assim ela entra
+      // nos totais de Receitas/Despesas do Resumo e fica visível no
+      // Histórico (rendimento de conta, tarifa não lançada, etc. viram um
+      // registro explicável, não um número que muda escondido).
+      await db.entries.add({
+        tipo: diferenca > 0 ? 'receita' : 'despesa',
+        valor: Math.abs(diferenca),
+        data: hojeISO(),
+        categoriaId: null,
+        subcategoriaId: null,
+        contaId: conta.id,
+        formaPagamento: diferenca > 0 ? null : 'debito',
+        nota: 'Ajuste de saldo (recalibração)',
+        origem: 'manual',
+        externalId: null,
+        recorrenciaId: null,
+        criadoEm: new Date().toISOString()
+      });
+    }
     setValorRecalibrar(0);
   }
 
@@ -443,7 +463,8 @@ function ConfigSaldo({ conta, entradas }) {
       </div>
       <p className="repeticao-explicacao">
         Calculado a partir do saldo informado em {formatDateBR(conta.saldoInicialData?.slice(0, 10))}, somando o que entrou e
-        saiu depois. Se não bater com a realidade, digite o valor exato que está no banco hoje (não a diferença):
+        saiu depois. Se não bater com a realidade, digite o valor exato que está no banco hoje (não a diferença) —
+        a diferença vira um lançamento de ajuste (receita ou despesa), visível no Histórico e contado no Resumo:
       </p>
       <div className="field">
         <label>Novo saldo (o valor exato que está no banco hoje)</label>
