@@ -938,6 +938,18 @@ input:focus, select:focus {
 .config-cartao-dias .field label { margin: 0; }
 .config-cartao-dias .field input { width: 64px; text-align: center; }
 
+.botao-link {
+  background: none;
+  border: none;
+  color: var(--blue);
+  font-size: 14px;
+  font-weight: 500;
+  padding: 0;
+  text-align: left;
+  cursor: pointer;
+}
+.botao-link-discreto { color: var(--text-secondary); font-size: 13px; margin-top: 10px; }
+
 /* ---------- Faturas ---------- */
 .fatura-cartao-bloco { margin-bottom: 8px; }
 .fatura-cartao-bloco h2 { display: flex; align-items: center; gap: 7px; }

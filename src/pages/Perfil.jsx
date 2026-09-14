@@ -390,18 +390,18 @@ function ListaContas() {
 // saldo de hoje de novo.
 function ConfigSaldo({ conta, entradas }) {
   const ativo = contaTemSaldoControlado(conta);
-  const [configurando, setConfigurando] = useState(false);
+  const [definindo, setDefinindo] = useState(false);
   const [valorInicial, setValorInicial] = useState(0);
   const [valorRecalibrar, setValorRecalibrar] = useState(0);
 
   const saldoAtual = useMemo(() => calcularSaldoConta(conta, entradas), [conta, entradas]);
 
-  async function confirmarAtivacao() {
+  async function confirmarDefinicao() {
     await db.contas.update(conta.id, { saldoInicial: valorInicial, saldoInicialData: hojeISO() });
-    setConfigurando(false);
+    setDefinindo(false);
   }
 
-  async function desativar() {
+  async function pararDeAcompanhar() {
     await db.contas.update(conta.id, { saldoInicialData: null });
   }
 
@@ -410,45 +410,46 @@ function ConfigSaldo({ conta, entradas }) {
     setValorRecalibrar(0);
   }
 
-  return (
-    <div className="config-cartao">
-      <label className="switch-row">
-        <span className="switch-label">Controlar saldo desta conta</span>
-        <span
-          className={`switch ${ativo ? 'ativo' : ''}`}
-          onClick={() => (ativo ? desativar() : setConfigurando((v) => !v))}
-        />
-      </label>
-
-      {!ativo && configurando && (
-        <div className="config-cartao-dias">
-          <div className="field">
-            <label>Saldo de hoje</label>
-            <MoneyInput value={valorInicial} onChange={setValorInicial} autoFocus />
-          </div>
-          <button type="button" className="btn-confirm" onClick={confirmarAtivacao}>Ativar controle de saldo</button>
-        </div>
-      )}
-
-      {ativo && (
-        <>
-          <div className="saldo-atual-linha">
-            <span>Saldo atual</span>
-            <strong style={{ color: saldoAtual >= 0 ? 'var(--green)' : 'var(--red)' }}>{formatCurrency(saldoAtual)}</strong>
-          </div>
-          <p className="repeticao-explicacao">
-            Calculado a partir do saldo informado em {formatDateBR(conta.saldoInicialData)}, somando o que entrou e
-            saiu depois. Se não bater com a realidade, recalibre com o saldo de hoje:
-          </p>
+  if (!ativo) {
+    return (
+      <div className="config-cartao">
+        {!definindo ? (
+          <button type="button" className="botao-link" onClick={() => setDefinindo(true)}>
+            Definir saldo atual
+          </button>
+        ) : (
           <div className="config-cartao-dias">
             <div className="field">
-              <label>Recalibrar saldo (usa a data de hoje)</label>
-              <MoneyInput value={valorRecalibrar} onChange={setValorRecalibrar} />
+              <label>Saldo de hoje</label>
+              <MoneyInput value={valorInicial} onChange={setValorInicial} autoFocus />
             </div>
-            <button type="button" className="btn-cancel" onClick={recalibrar}>Recalibrar</button>
+            <button type="button" className="btn-confirm" onClick={confirmarDefinicao}>Salvar saldo</button>
           </div>
-        </>
-      )}
+        )}
+      </div>
+    );
+  }
+
+  return (
+    <div className="config-cartao">
+      <div className="saldo-atual-linha">
+        <span>Saldo atual</span>
+        <strong style={{ color: saldoAtual >= 0 ? 'var(--green)' : 'var(--red)' }}>{formatCurrency(saldoAtual)}</strong>
+      </div>
+      <p className="repeticao-explicacao">
+        Calculado a partir do saldo informado em {formatDateBR(conta.saldoInicialData)}, somando o que entrou e
+        saiu depois. Se não bater com a realidade, recalibre com o saldo de hoje:
+      </p>
+      <div className="config-cartao-dias">
+        <div className="field">
+          <label>Recalibrar saldo (usa a data de hoje)</label>
+          <MoneyInput value={valorRecalibrar} onChange={setValorRecalibrar} />
+        </div>
+        <button type="button" className="btn-cancel" onClick={recalibrar}>Recalibrar</button>
+      </div>
+      <button type="button" className="botao-link botao-link-discreto" onClick={pararDeAcompanhar}>
+        Parar de acompanhar saldo desta conta
+      </button>
     </div>
   );
 }

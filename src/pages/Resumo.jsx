@@ -33,6 +33,7 @@ export default function Resumo({ onAbrirFaturas }) {
       .map((c) => ({ ...c, saldoAtual: calcularSaldoConta(c, entradas) })),
     [contas, entradas]
   );
+  const contasSemSaldo = useMemo(() => contas.filter((c) => !contaTemSaldoControlado(c)), [contas]);
 
   const anosDisponiveis = useMemo(() => {
     const anos = new Set(entradas.map((e) => anoMesDe(e.data).ano));
@@ -336,6 +337,14 @@ export default function Resumo({ onAbrirFaturas }) {
               );
             })}
           </div>
+          {contasSemSaldo.length > 0 && (
+            <p className="aviso-previsao">
+              {contasSemSaldo.length === 1
+                ? `1 conta sem saldo informado (${contasSemSaldo[0].nome})`
+                : `${contasSemSaldo.length} contas sem saldo informado`}
+              {' — configure em Perfil → Contas.'}
+            </p>
+          )}
         </>
       )}
 
