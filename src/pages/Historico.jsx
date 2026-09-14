@@ -313,6 +313,28 @@ function EditarEntry({ entry, onCancelar, onSalvo }) {
 
   return (
     <div className="edit-box">
+      {mostrarTogglePagamento && (
+        <div className="field">
+          <label>Forma de pagamento</label>
+          <div className="tipo-tabs">
+            <button
+              type="button"
+              className={`tipo-tab ${formaPagamento === 'debito' ? 'ativo' : ''}`}
+              onClick={() => setFormaPagamento('debito')}
+            >
+              Débito
+            </button>
+            <button
+              type="button"
+              className={`tipo-tab ${formaPagamento === 'credito' ? 'ativo' : ''}`}
+              onClick={() => setFormaPagamento('credito')}
+            >
+              Crédito
+            </button>
+          </div>
+        </div>
+      )}
+
       <div className="field">
         <label>Valor</label>
         <MoneyInput value={valor} onChange={setValor} />
@@ -336,28 +358,6 @@ function EditarEntry({ entry, onCancelar, onSalvo }) {
             <EditableSelect label="Subcategoria" options={subcategorias} value={subcategoriaId} onChange={setSubcategoriaId} onCreate={criarSubcategoria} />
           )}
           <EditableSelect label="Conta" options={contas} value={contaId} onChange={setContaId} onCreate={criarConta} />
-
-          {mostrarTogglePagamento && (
-            <div className="field">
-              <label>Forma de pagamento</label>
-              <div className="tipo-tabs">
-                <button
-                  type="button"
-                  className={`tipo-tab ${formaPagamento === 'debito' ? 'ativo' : ''}`}
-                  onClick={() => setFormaPagamento('debito')}
-                >
-                  Débito
-                </button>
-                <button
-                  type="button"
-                  className={`tipo-tab ${formaPagamento === 'credito' ? 'ativo' : ''}`}
-                  onClick={() => setFormaPagamento('credito')}
-                >
-                  Crédito
-                </button>
-              </div>
-            </div>
-          )}
         </>
       )}
 

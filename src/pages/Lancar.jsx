@@ -201,6 +201,28 @@ export default function Lancar() {
       </div>
 
       <form onSubmit={salvar} className="form">
+        {mostrarTogglePagamento && (
+          <div className="field">
+            <label>Forma de pagamento</label>
+            <div className="tipo-tabs">
+              <button
+                type="button"
+                className={`tipo-tab ${formaPagamento === 'debito' ? 'ativo' : ''}`}
+                onClick={() => setFormaPagamento('debito')}
+              >
+                Débito
+              </button>
+              <button
+                type="button"
+                className={`tipo-tab ${formaPagamento === 'credito' ? 'ativo' : ''}`}
+                onClick={() => setFormaPagamento('credito')}
+              >
+                Crédito
+              </button>
+            </div>
+          </div>
+        )}
+
         <div className="field">
           <label htmlFor="valor">Valor</label>
           <MoneyInput id="valor" value={valor} onChange={setValor} autoFocus />
@@ -260,28 +282,6 @@ export default function Lancar() {
               onCreate={criarConta}
               placeholder="Selecione a conta"
             />
-
-            {mostrarTogglePagamento && (
-              <div className="field">
-                <label>Forma de pagamento</label>
-                <div className="tipo-tabs">
-                  <button
-                    type="button"
-                    className={`tipo-tab ${formaPagamento === 'debito' ? 'ativo' : ''}`}
-                    onClick={() => setFormaPagamento('debito')}
-                  >
-                    Débito
-                  </button>
-                  <button
-                    type="button"
-                    className={`tipo-tab ${formaPagamento === 'credito' ? 'ativo' : ''}`}
-                    onClick={() => setFormaPagamento('credito')}
-                  >
-                    Crédito
-                  </button>
-                </div>
-              </div>
-            )}
           </>
         )}
 
