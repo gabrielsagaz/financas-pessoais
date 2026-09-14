@@ -45,6 +45,7 @@ export const db = {
   configuracoes: criarTabela('configuracoes'),
   excecoesValor: criarTabela('excecoesValor'),
   dividas: criarTabela('dividas'),
+  provisoes: criarTabela('provisoes'),
 
   // Best-effort, NÃO atômico: o Dexie garantia que, se algo no meio falhasse,
   // nada era salvo. O Firestore não oferece isso pra sequências arbitrárias

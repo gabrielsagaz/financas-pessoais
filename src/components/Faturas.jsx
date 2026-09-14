@@ -151,9 +151,21 @@ function FaturasDoCartao({ cartao, entradas, entradasReais, contasParaPagar }) {
     [entradas, entradasReais, cartao]
   );
 
+  const faturaAtual = faturas.find((f) => f.chave === faturaAtualChave);
+  const usoLimite = cartao.limiteCredito > 0 && faturaAtual
+    ? Math.max(0, faturaAtual.total - faturaAtual.pago) / cartao.limiteCredito
+    : null;
+
   return (
     <div className="fatura-cartao-bloco">
       <h2><IconCard size={16} /> {cartao.nome}</h2>
+      {usoLimite !== null && usoLimite >= 0.8 && (
+        <p className={`aviso-fatura ${usoLimite >= 1 ? 'aviso-fatura-atrasada' : ''}`}>
+          {usoLimite >= 1
+            ? `Fatura em aberto ultrapassou o limite de ${formatCurrency(cartao.limiteCredito)}.`
+            : `Fatura em aberto já usa ${(usoLimite * 100).toFixed(0)}% do limite de ${formatCurrency(cartao.limiteCredito)}.`}
+        </p>
+      )}
       {faturas.length === 0 ? (
         <p className="vazio">Nenhum gasto neste cartão ainda.</p>
       ) : (

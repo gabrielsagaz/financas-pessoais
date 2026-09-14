@@ -4,6 +4,7 @@ import { db } from '../db/db';
 import ConfirmDialog from '../components/ConfirmDialog';
 import { IconTrash, IconChevron, IconCard, IconArrowLeft } from '../components/Icons';
 import MoneyInput from '../components/MoneyInput';
+import EditableSelect from '../components/EditableSelect';
 import PinPad from '../components/PinPad';
 import { definirPin, removerPin, pinEstaAtivo } from '../db/security';
 import { exportarBackup, baixarBackupComoArquivo, importarBackup, apagarTodosOsLancamentos } from '../db/backup';
@@ -37,6 +38,9 @@ export default function Perfil({ onVoltar }) {
 
       <h2 style={{ marginTop: 32 }}>Dívidas</h2>
       <ListaDividas />
+
+      <h2 style={{ marginTop: 32 }}>Provisões</h2>
+      <ListaProvisoes />
 
       <h2 style={{ marginTop: 32 }}>Planejamento</h2>
       <MetasCascata />
@@ -504,6 +508,177 @@ function ListaDividas() {
   );
 }
 
+// Provisões (Fase 3 — envelopes/sinking funds): um valor anual (ex: IPTU,
+// seguro) dividido num aporte mensal que vai se acumulando numa conta até o
+// gasto acontecer. Diferente de dívida: aqui você está GUARDANDO pra um
+// gasto futuro certo, não pagando algo que já aconteceu. Ao confirmar o
+// gasto, cria a despesa de verdade (na categoria e conta escolhidas) e
+// zera o acumulado, reiniciando o ciclo pro próximo ano.
+function ListaProvisoes() {
+  const provisoes = useLiveQuery(() => db.provisoes.toArray(), []) || [];
+  const categorias = useLiveQuery(() => db.categorias.where('tipo').equals('despesa').sortBy('ordem'), []) || [];
+  const contas = useLiveQuery(() => db.contas.orderBy('ordem').toArray(), []) || [];
+  const [novoNome, setNovoNome] = useState('');
+  const [expandidaId, setExpandidaId] = useState(null);
+  const [excluindoId, setExcluindoId] = useState(null);
+  const [gastandoId, setGastandoId] = useState(null);
+
+  async function adicionar() {
+    const nome = novoNome.trim();
+    if (!nome) return;
+    await db.provisoes.add({
+      nome, valorAlvo: 0, aporteMensal: 0, valorAcumulado: 0,
+      contaId: null, categoriaId: null, criadoEm: new Date().toISOString()
+    });
+    setNovoNome('');
+  }
+
+  async function renomear(provisao, novoValor) {
+    if (!novoValor.trim()) return;
+    await db.provisoes.update(provisao.id, { nome: novoValor.trim() });
+  }
+
+  async function salvarCampo(provisao, campo, valor) {
+    await db.provisoes.update(provisao.id, { [campo]: valor });
+  }
+
+  async function confirmarGasto(provisao) {
+    if (!provisao.contaId || !provisao.categoriaId) return;
+    await db.entries.add({
+      tipo: 'despesa',
+      valor: provisao.valorAcumulado,
+      data: hojeISO(),
+      categoriaId: provisao.categoriaId,
+      subcategoriaId: null,
+      contaId: provisao.contaId,
+      formaPagamento: 'debito',
+      nota: `Provisão: ${provisao.nome}`,
+      origem: 'manual',
+      externalId: null,
+      recorrenciaId: null,
+      criadoEm: new Date().toISOString()
+    });
+    await db.provisoes.update(provisao.id, { valorAcumulado: 0 });
+    setGastandoId(null);
+  }
+
+  async function confirmarExclusao() {
+    await db.provisoes.delete(excluindoId);
+    setExcluindoId(null);
+  }
+
+  async function criarCategoria(nome) {
+    return db.categorias.add({ tipo: 'despesa', nome, ordem: categorias.length });
+  }
+  async function criarConta(nome) {
+    return db.contas.add({ nome, ordem: contas.length, arquivada: false, tipo: 'conta' });
+  }
+
+  return (
+    <div className="lista-contas">
+      {provisoes.map((provisao) => {
+        const percentual = provisao.valorAlvo > 0 ? Math.min(100, (provisao.valorAcumulado / provisao.valorAlvo) * 100) : 0;
+        return (
+          <div key={provisao.id} className="categoria-card">
+            <div className="categoria-header" onClick={() => setExpandidaId(expandidaId === provisao.id ? null : provisao.id)}>
+              <input
+                className="categoria-nome-input"
+                value={provisao.nome}
+                onClick={(e) => e.stopPropagation()}
+                onChange={(e) => renomear(provisao, e.target.value)}
+              />
+              <span className="saldo-inline" style={{ color: 'var(--blue)' }}>
+                {formatCurrency(provisao.valorAcumulado)} / {formatCurrency(provisao.valorAlvo)}
+              </span>
+              <button
+                type="button"
+                className="btn-excluir-mini"
+                onClick={(e) => { e.stopPropagation(); setExcluindoId(provisao.id); }}
+              >
+                <IconTrash />
+              </button>
+              <span className="expand-icon"><IconChevron open={expandidaId === provisao.id} /></span>
+            </div>
+            {expandidaId === provisao.id && (
+              <div className="config-cartao">
+                <div className="orcamento-barra" style={{ margin: '0 12px 4px' }}>
+                  <div className="orcamento-barra-fill" style={{ width: `${percentual}%`, background: 'var(--blue)' }} />
+                </div>
+                <div className="field">
+                  <label>Valor anual necessário</label>
+                  <MoneyInput value={provisao.valorAlvo} onChange={(v) => salvarCampo(provisao, 'valorAlvo', v)} />
+                </div>
+                <div className="field">
+                  <label>Aporte mensal</label>
+                  <MoneyInput value={provisao.aporteMensal} onChange={(v) => salvarCampo(provisao, 'aporteMensal', v)} />
+                </div>
+                <EditableSelect
+                  label="Conta onde o valor se acumula"
+                  options={contas}
+                  value={provisao.contaId}
+                  onChange={(v) => salvarCampo(provisao, 'contaId', v)}
+                  onCreate={criarConta}
+                  placeholder="Selecione a conta"
+                />
+                <EditableSelect
+                  label="Categoria (usada quando o gasto acontecer)"
+                  options={categorias}
+                  value={provisao.categoriaId}
+                  onChange={(v) => salvarCampo(provisao, 'categoriaId', v)}
+                  onCreate={criarCategoria}
+                  placeholder="Selecione a categoria"
+                />
+
+                {!gastandoId || gastandoId !== provisao.id ? (
+                  <button
+                    type="button"
+                    className="btn-confirm"
+                    style={{ width: '100%' }}
+                    disabled={provisao.valorAcumulado <= 0}
+                    onClick={() => setGastandoId(provisao.id)}
+                  >
+                    Confirmar gasto ({formatCurrency(provisao.valorAcumulado)})
+                  </button>
+                ) : (
+                  <div className="edit-actions">
+                    <button type="button" className="btn-cancel" onClick={() => setGastandoId(null)}>Cancelar</button>
+                    <button
+                      type="button"
+                      className="btn-primary"
+                      disabled={!provisao.contaId || !provisao.categoriaId}
+                      onClick={() => confirmarGasto(provisao)}
+                    >
+                      Confirmar — cria a despesa e zera
+                    </button>
+                  </div>
+                )}
+              </div>
+            )}
+          </div>
+        );
+      })}
+      <div className="inline-add">
+        <input
+          type="text"
+          placeholder="Nova provisão (ex: IPTU, Seguro do carro)..."
+          value={novoNome}
+          onChange={(e) => setNovoNome(e.target.value)}
+          onKeyDown={(e) => e.key === 'Enter' && adicionar()}
+        />
+        <button type="button" className="btn-confirm" onClick={adicionar}>Adicionar</button>
+      </div>
+
+      <ConfirmDialog
+        open={excluindoId !== null}
+        title="Excluir provisão?"
+        message="Remove o registro por completo — não afeta nenhum lançamento já feito."
+        onConfirm={confirmarExclusao}
+        onCancel={() => setExcluindoId(null)}
+      />
+    </div>
+  );
+}
+
 // Metas da cascata de planejamento (Fase 3): meses de despesas pra reserva
 // de emergência e % da renda pro aporte de investimento. Configuração rara
 // (revisar quando mudar de renda ou de meta) — o que se repete todo mês é
@@ -512,7 +687,11 @@ function MetasCascata() {
   const registro = useLiveQuery(() => db.configuracoes.where('chave').equals('metasCascata').first(), []);
   const metas = registro
     ? JSON.parse(registro.valor)
-    : { mesesReserva: 6, despesaMensalEstimada: 0, percentInvestimento: 10, valorFixoInvestimento: 0, modoInvestimento: 'percent' };
+    : {
+        mesesReservaMinima: 3, mesesReservaCompleta: 6, despesaMensalEstimada: 0,
+        percentDivisaoReservaInvestimento: 50,
+        percentInvestimento: 10, valorFixoInvestimento: 0, modoInvestimento: 'percent'
+      };
   const [resultadoMigracao, setResultadoMigracao] = useState(null);
   const [migrando, setMigrando] = useState(false);
 
@@ -540,13 +719,25 @@ function MetasCascata() {
     <div className="config-cartao">
       <div className="config-cartao-dias">
         <div className="field">
-          <label>Meses de despesas na reserva de emergência</label>
-          <input type="number" min="0" value={metas.mesesReserva} onChange={(e) => salvar('mesesReserva', e.target.value)} style={{ width: 64, textAlign: 'center' }} />
+          <label>Reserva mínima (meses de despesa)</label>
+          <input type="number" min="0" value={metas.mesesReservaMinima} onChange={(e) => salvar('mesesReservaMinima', e.target.value)} style={{ width: 64, textAlign: 'center' }} />
         </div>
         <div className="field">
-          <label>Sua despesa mensal estimada (usada na meta acima)</label>
+          <label>Reserva completa (meses de despesa)</label>
+          <input type="number" min="0" value={metas.mesesReservaCompleta} onChange={(e) => salvar('mesesReservaCompleta', e.target.value)} style={{ width: 64, textAlign: 'center' }} />
+        </div>
+        <div className="field">
+          <label>Sua despesa mensal estimada (usada nas duas metas acima)</label>
           <MoneyInput value={metas.despesaMensalEstimada} onChange={(v) => salvar('despesaMensalEstimada', v)} />
         </div>
+        <div className="field">
+          <label>% do investimento desviado pra reserva (entre mínima e completa)</label>
+          <input type="number" min="0" max="100" value={metas.percentDivisaoReservaInvestimento} onChange={(e) => salvar('percentDivisaoReservaInvestimento', e.target.value)} style={{ width: 64, textAlign: 'center' }} />
+        </div>
+        <p className="repeticao-explicacao">
+          Abaixo da reserva mínima: prioridade total pra reserva. Entre mínima e completa: esse % do investimento é
+          desviado pra reserva, o resto continua sendo investido. Ao atingir a completa: 100% volta a ser investimento.
+        </p>
         <div className="field">
           <label>% da renda pro aporte de investimento{metas.modoInvestimento === 'percent' && ' (ativo)'}</label>
           <input type="number" min="0" max="100" value={metas.percentInvestimento} onChange={(e) => salvar('percentInvestimento', e.target.value)} style={{ width: 64, textAlign: 'center' }} />
@@ -710,6 +901,10 @@ function ConfigCartao({ conta }) {
     await db.contas.update(conta.id, { [campo === 'fechamento' ? 'diaFechamento' : 'diaVencimento']: dia });
   }
 
+  async function salvarLimite(valor) {
+    await db.contas.update(conta.id, { limiteCredito: valor });
+  }
+
   return (
     <div className="config-cartao">
       <div className="config-cartao-dias">
@@ -725,6 +920,13 @@ function ConfigCartao({ conta }) {
           Ao lançar uma despesa nesta conta, você escolhe se foi no crédito ou no débito. Compras no crédito depois
           do dia de fechamento entram na fatura seguinte — isso só organiza a visualização em Faturas/Histórico,
           não controla saldo nem gera cobrança automática.
+        </p>
+      </div>
+      <div className="field" style={{ marginTop: 10 }}>
+        <label>Limite de crédito (opcional)</label>
+        <MoneyInput value={conta.limiteCredito || 0} onChange={salvarLimite} />
+        <p className="repeticao-explicacao">
+          Se preenchido, a fatura em aberto mostra um aviso ao chegar perto (80%) ou passar do limite.
         </p>
       </div>
     </div>

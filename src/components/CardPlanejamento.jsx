@@ -6,54 +6,106 @@ import { contaTemSaldoControlado, calcularSaldoConta } from '../db/saldos';
 
 // ---------------------------------------------------------------------------
 // Cascata: a renda do mês é alocada em ORDEM de prioridade — cada balde
-// pega o que precisa (até seu limite), o resto desce pro próximo:
+// pega o que precisa (até seu limite), o resto desce pro próximo. A ordem
+// muda de acordo com a FAIXA em que a reserva de emergência está:
 //
-//   1. Investimento — % da renda OU um valor fixo em R$ (o usuário escolhe
-//      qual dos dois usar, editando o campo correspondente em Perfil)
-//   2. Reserva de emergência — até atingir a meta (meses × despesa mensal
-//      ESTIMADA, um valor que você define direto em Perfil > Planejamento —
-//      não uma média calculada do histórico de lançamentos)
-//   3. Dívidas — soma das parcelas mensais das dívidas ainda não quitadas
-//   4. Necessidade/Desejo — não geram lançamento nenhum: é o dinheiro que já
-//      fica na conta principal e é gasto normalmente, como sempre foi.
-//      "Sobra Livre" (o que resta depois de 1-3) é só a referência de
-//      quanto dá pra gastar sem tocar na reserva nem pular parcela.
+//   Reserva ABAIXO da mínima (nem o básico):
+//     1. Reserva — prioridade total, tira o que precisar da renda antes
+//        até do investimento
+//     2. Investimento — o que sobrar, até o valor calculado (% ou fixo)
 //
-// Cada balde é CAPADO pelo que sobrou do anterior — é uma cascata de
-// verdade, não três cálculos independentes contra a renda cheia. Só o
-// Investimento pode "faltar renda" (se for valor fixo maior que a renda do
-// mês): nesse caso os baldes seguintes zeram e o card avisa.
+//   Reserva ENTRE mínima e completa:
+//     1. Investimento — valor cheio calculado (% ou fixo) sai primeiro
+//     2. Dentro desse valor, uma % configurada é DESVIADA pra reserva
+//        (o resto continua sendo investimento de verdade) — reversão
+//        gradual, não um chaveamento seco
+//
+//   Reserva COMPLETA:
+//     1. Investimento — 100% do valor calculado, nada mais desviado
+//
+// Depois da Reserva+Investimento, na ordem: Dívidas (parcelas das dívidas
+// ativas) → Provisões (aportes mensais dos envelopes) → Sobra Livre (o
+// resto — Necessidade/Desejo não geram lançamento, é o dinheiro que já
+// fica na conta e é gasto normalmente).
+//
+// Se o que sobra não for suficiente pra cobrir Dívidas+Provisões no valor
+// cheio, os dois são reduzidos PROPORCIONALMENTE (não um "para" o outro) —
+// e o card avisa. Só o Investimento (se for valor FIXO maior que a renda)
+// pode zerar tudo que vem depois dele.
 // ---------------------------------------------------------------------------
 
-function calcularCascata({ renda, modoInvestimento, percentInvestimento, valorFixoInvestimento, reservaAtual, mesesReserva, despesaMensalEstimada, dividasAtivas }) {
-  const aporteInvestimento = modoInvestimento === 'fixo' ? valorFixoInvestimento : renda * (percentInvestimento / 100);
-  const restanteAposInvestimento = Math.max(0, renda - aporteInvestimento);
-  const investimentoEstourouRenda = aporteInvestimento > renda;
+function calcularCascata({
+  renda, modoInvestimento, percentInvestimento, valorFixoInvestimento,
+  reservaAtual, mesesReservaMinima, mesesReservaCompleta, despesaMensalEstimada,
+  percentDivisaoReservaInvestimento, dividasAtivas, provisoes
+}) {
+  const metaMinima = mesesReservaMinima * despesaMensalEstimada;
+  const metaCompleta = mesesReservaCompleta * despesaMensalEstimada;
+  const aporteInvestimentoBase = modoInvestimento === 'fixo' ? valorFixoInvestimento : renda * (percentInvestimento / 100);
+  const investimentoEstourouRenda = aporteInvestimentoBase > renda;
 
-  const metaReserva = mesesReserva * despesaMensalEstimada;
-  const faltanteReserva = Math.max(0, metaReserva - reservaAtual);
-  const aporteReserva = Math.min(restanteAposInvestimento, faltanteReserva);
-  const restanteAposReserva = restanteAposInvestimento - aporteReserva;
+  let aporteReserva = 0;
+  let aporteInvestimento = 0;
+  let restante;
+  let faixaReserva;
 
-  const totalParcelas = dividasAtivas.reduce((soma, d) => soma + Math.min(d.parcelaMensal, d.valorTotal - d.valorPago), 0);
-  const pagamentoDividas = Math.min(restanteAposReserva, totalParcelas);
-  const sobraLivre = restanteAposReserva - pagamentoDividas;
+  if (reservaAtual < metaMinima) {
+    faixaReserva = 'abaixo_minima';
+    const faltanteMinima = metaMinima - reservaAtual;
+    aporteReserva = Math.min(renda, faltanteMinima);
+    const restanteAposReserva = Math.max(0, renda - aporteReserva);
+    aporteInvestimento = Math.min(restanteAposReserva, aporteInvestimentoBase);
+    restante = restanteAposReserva - aporteInvestimento;
+  } else if (reservaAtual < metaCompleta) {
+    faixaReserva = 'entre';
+    const restanteAposInvestimentoTotal = Math.max(0, renda - aporteInvestimentoBase);
+    const desviado = aporteInvestimentoBase * (percentDivisaoReservaInvestimento / 100);
+    const faltanteCompleta = metaCompleta - reservaAtual;
+    aporteReserva = Math.min(desviado, faltanteCompleta);
+    aporteInvestimento = aporteInvestimentoBase - aporteReserva;
+    restante = restanteAposInvestimentoTotal;
+  } else {
+    faixaReserva = 'completa';
+    aporteInvestimento = Math.min(renda, aporteInvestimentoBase);
+    restante = Math.max(0, renda - aporteInvestimento);
+  }
 
-  return { metaReserva, faltanteReserva, aporteReserva, pagamentoDividas, aporteInvestimento, sobraLivre, investimentoEstourouRenda };
+  const totalParcelasDividas = dividasAtivas.reduce((s, d) => s + Math.min(d.parcelaMensal, d.valorTotal - d.valorPago), 0);
+  const totalAportesProvisoes = provisoes.reduce((s, p) => s + (p.aporteMensal || 0), 0);
+  const totalDividasEProvisoes = totalParcelasDividas + totalAportesProvisoes;
+
+  // Se não sobrar o suficiente pros dois juntos, reduz PROPORCIONALMENTE —
+  // nenhum dos dois "ganha" prioridade sobre o outro dentro desse balde.
+  const fatorReducao = totalDividasEProvisoes > 0 ? Math.min(1, restante / totalDividasEProvisoes) : 1;
+  const pagamentoDividas = totalParcelasDividas * fatorReducao;
+  const aporteProvisoes = totalAportesProvisoes * fatorReducao;
+  const sobraLivre = restante - pagamentoDividas - aporteProvisoes;
+
+  return {
+    metaMinima, metaCompleta, faixaReserva, aporteReserva, aporteInvestimento,
+    pagamentoDividas, aporteProvisoes, sobraLivre, investimentoEstourouRenda,
+    reducaoDividasProvisoes: fatorReducao < 1
+  };
 }
 
 export default function CardPlanejamento({ mes, renda, entradas, contas }) {
   const dividasTodas = useLiveQuery(() => db.dividas.toArray(), []) || [];
+  const provisoesTodas = useLiveQuery(() => db.provisoes.toArray(), []) || [];
   const registroMetas = useLiveQuery(() => db.configuracoes.where('chave').equals('metasCascata').first(), []);
   const metas = registroMetas
     ? JSON.parse(registroMetas.valor)
-    : { mesesReserva: 6, despesaMensalEstimada: 0, percentInvestimento: 10, valorFixoInvestimento: 0, modoInvestimento: 'percent' };
+    : {
+        mesesReservaMinima: 3, mesesReservaCompleta: 6, despesaMensalEstimada: 0,
+        percentDivisaoReservaInvestimento: 50,
+        percentInvestimento: 10, valorFixoInvestimento: 0, modoInvestimento: 'percent'
+      };
 
   const [confirmando, setConfirmando] = useState(false);
   const [contaOrigemId, setContaOrigemId] = useState(null);
   const [toast, setToast] = useState('');
 
   const dividasAtivas = useMemo(() => dividasTodas.filter((d) => d.valorTotal - d.valorPago > 0.01), [dividasTodas]);
+  const provisoesComAporte = useMemo(() => provisoesTodas.filter((p) => (p.aporteMensal || 0) > 0), [provisoesTodas]);
 
   const contasReserva = useMemo(() => contas.filter((c) => c.reservaEmergencia === true), [contas]);
   const reservaAtual = useMemo(
@@ -68,17 +120,27 @@ export default function CardPlanejamento({ mes, renda, entradas, contas }) {
       percentInvestimento: metas.percentInvestimento,
       valorFixoInvestimento: metas.valorFixoInvestimento,
       reservaAtual,
-      mesesReserva: metas.mesesReserva,
+      mesesReservaMinima: metas.mesesReservaMinima,
+      mesesReservaCompleta: metas.mesesReservaCompleta,
       despesaMensalEstimada: metas.despesaMensalEstimada,
-      dividasAtivas
+      percentDivisaoReservaInvestimento: metas.percentDivisaoReservaInvestimento,
+      dividasAtivas,
+      provisoes: provisoesComAporte
     }),
-    [renda, reservaAtual, metas, dividasAtivas]
+    [renda, reservaAtual, metas, dividasAtivas, provisoesComAporte]
   );
 
   async function confirmarAlocacao() {
     if (!contaOrigemId) return;
     const agora = new Date().toISOString();
     const dataHoje = hojeISO();
+    // Mesmo fator usado no cálculo de exibição, aplicado aqui pra cada
+    // dívida/provisão individualmente — garante que o total criado bate
+    // exatamente com o que o card mostrou, mesmo quando reduzido.
+    const totalParcelasDividas = dividasAtivas.reduce((s, d) => s + Math.min(d.parcelaMensal, d.valorTotal - d.valorPago), 0);
+    const totalAportesProvisoes = provisoesComAporte.reduce((s, p) => s + (p.aporteMensal || 0), 0);
+    const totalPrevisto = totalParcelasDividas + totalAportesProvisoes;
+    const fator = totalPrevisto > 0 ? Math.min(1, (cascata.pagamentoDividas + cascata.aporteProvisoes) / totalPrevisto) : 1;
 
     if (cascata.aporteReserva > 0 && contasReserva.length > 0) {
       // Mais de uma conta marcada como reserva: o aporte todo vai pra
@@ -102,7 +164,8 @@ export default function CardPlanejamento({ mes, renda, entradas, contas }) {
     }
 
     for (const divida of dividasAtivas) {
-      const parcela = Math.min(divida.parcelaMensal, divida.valorTotal - divida.valorPago);
+      const parcelaCheia = Math.min(divida.parcelaMensal, divida.valorTotal - divida.valorPago);
+      const parcela = parcelaCheia * fator;
       if (parcela <= 0) continue;
       await db.entries.add({
         tipo: 'despesa',
@@ -119,6 +182,28 @@ export default function CardPlanejamento({ mes, renda, entradas, contas }) {
         criadoEm: agora
       });
       await db.dividas.update(divida.id, { valorPago: divida.valorPago + parcela });
+    }
+
+    for (const provisao of provisoesComAporte) {
+      const aporte = (provisao.aporteMensal || 0) * fator;
+      if (aporte <= 0 || !provisao.contaId) continue;
+      await db.entries.add({
+        tipo: 'transferencia',
+        valor: aporte,
+        data: dataHoje,
+        categoriaId: null,
+        subcategoriaId: null,
+        contaId: contaOrigemId,
+        contaDestinoId: provisao.contaId,
+        cartaoId: null,
+        nota: `Aporte provisão: ${provisao.nome} (planejamento)`,
+        pagamentoFaturaChave: null,
+        origem: 'manual',
+        externalId: null,
+        recorrenciaId: null,
+        criadoEm: agora
+      });
+      await db.provisoes.update(provisao.id, { valorAcumulado: (provisao.valorAcumulado || 0) + aporte });
     }
 
     if (cascata.aporteInvestimento > 0) {
@@ -148,6 +233,12 @@ export default function CardPlanejamento({ mes, renda, entradas, contas }) {
     return <p className="vazio">Defina sua despesa mensal estimada em Perfil → Planejamento pra calcular a meta de reserva.</p>;
   }
 
+  const rotuloFaixa = {
+    abaixo_minima: 'Abaixo da mínima — prioridade total',
+    entre: 'Entre mínima e completa — reversão parcial',
+    completa: 'Completa — 100% pro investimento'
+  }[cascata.faixaReserva];
+
   return (
     <div className="chart-box planejamento-box">
       <div className="planejamento-linha">
@@ -163,20 +254,25 @@ export default function CardPlanejamento({ mes, renda, entradas, contas }) {
       </div>
 
       <div className="planejamento-linha">
-        <span>
-          Reserva de emergência
-          {cascata.faltanteReserva <= 0 && <span className="fatura-tag fatura-tag-positivo" style={{ marginLeft: 6 }}>Meta atingida</span>}
-        </span>
+        <span>Reserva de emergência</span>
         <strong>−{formatCurrency(cascata.aporteReserva)}</strong>
       </div>
       <p className="repeticao-explicacao" style={{ margin: '-4px 0 4px' }}>
-        Meta: {formatCurrency(cascata.metaReserva)} ({metas.mesesReserva}× a despesa mensal estimada) · atual: {formatCurrency(reservaAtual)}
+        {rotuloFaixa} · mínima: {formatCurrency(cascata.metaMinima)} · completa: {formatCurrency(cascata.metaCompleta)} ·
+        atual: {formatCurrency(reservaAtual)}
       </p>
 
       {dividasAtivas.length > 0 && (
         <div className="planejamento-linha">
           <span>Dívidas ({dividasAtivas.length})</span>
           <strong>−{formatCurrency(cascata.pagamentoDividas)}</strong>
+        </div>
+      )}
+
+      {provisoesComAporte.length > 0 && (
+        <div className="planejamento-linha">
+          <span>Provisões ({provisoesComAporte.length})</span>
+          <strong>−{formatCurrency(cascata.aporteProvisoes)}</strong>
         </div>
       )}
 
@@ -188,7 +284,13 @@ export default function CardPlanejamento({ mes, renda, entradas, contas }) {
       {cascata.investimentoEstourouRenda && (
         <p className="aviso-fatura aviso-fatura-atrasada" style={{ margin: 0 }}>
           O valor fixo de investimento ({formatCurrency(cascata.aporteInvestimento)}) é maior que a renda do mês —
-          não sobra nada pra Reserva, Dívidas ou Sobra Livre.
+          não sobra nada pra Reserva, Dívidas, Provisões ou Sobra Livre.
+        </p>
+      )}
+      {cascata.reducaoDividasProvisoes && (
+        <p className="aviso-fatura" style={{ margin: 0 }}>
+          A renda não é suficiente pras parcelas de dívidas e aportes de provisões no valor cheio — os dois foram
+          reduzidos proporcionalmente esse mês.
         </p>
       )}
 
@@ -199,7 +301,7 @@ export default function CardPlanejamento({ mes, renda, entradas, contas }) {
       ) : (
         <div className="fatura-pagar-form">
           <div className="field">
-            <label>De qual conta sai (reserva, dívidas e investimento)</label>
+            <label>De qual conta sai (investimento, reserva, dívidas e provisões)</label>
             <select value={contaOrigemId ?? ''} onChange={(e) => setContaOrigemId(e.target.value || null)}>
               <option value="">Selecione a conta</option>
               {contas.map((c) => <option key={c.id} value={c.id}>{c.nome}</option>)}

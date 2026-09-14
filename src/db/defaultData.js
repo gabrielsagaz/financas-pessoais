@@ -156,5 +156,6 @@ export const CLASSIFICACOES = {
   necessidade: { label: 'Necessidade', cor: '#0071e3' },
   desejo: { label: 'Desejo', cor: '#af52de' },
   divida: { label: 'Dívida', cor: '#d92d20' },
+  provisao: { label: 'Provisão', cor: '#ff9f0a' },
   investimento: { label: 'Investimento', cor: '#1c8a4b' }
 };
