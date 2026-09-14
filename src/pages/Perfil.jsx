@@ -410,22 +410,34 @@ function ConfigSaldo({ conta, entradas }) {
     await db.contas.update(conta.id, { saldoInicialData: null });
   }
 
+  async function categoriaDeAjuste(tipo) {
+    const existente = await db.categorias
+      .where('tipo').equals(tipo)
+      .and((c) => c.nome === 'Recalibração de saldo')
+      .first();
+    if (existente) return existente.id;
+
+    const total = await db.categorias.where('tipo').equals(tipo).count();
+    return db.categorias.add({ tipo, nome: 'Recalibração de saldo', ordem: total });
+  }
+
   async function recalibrar() {
     const diferenca = Math.round((valorRecalibrar - saldoAtual) * 100) / 100;
     if (diferenca !== 0) {
+      const tipo = diferenca > 0 ? 'receita' : 'despesa';
       // Cria um lançamento de verdade com a diferença — assim ela entra
       // nos totais de Receitas/Despesas do Resumo e fica visível no
-      // Histórico (rendimento de conta, tarifa não lançada, etc. viram um
-      // registro explicável, não um número que muda escondido).
+      // Histórico, já organizado numa categoria própria (em vez de "sem
+      // categoria" + explicação escondida na observação).
       await db.entries.add({
-        tipo: diferenca > 0 ? 'receita' : 'despesa',
+        tipo,
         valor: Math.abs(diferenca),
         data: hojeISO(),
-        categoriaId: null,
+        categoriaId: await categoriaDeAjuste(tipo),
         subcategoriaId: null,
         contaId: conta.id,
         formaPagamento: diferenca > 0 ? null : 'debito',
-        nota: 'Ajuste de saldo (recalibração)',
+        nota: '',
         origem: 'manual',
         externalId: null,
         recorrenciaId: null,
@@ -464,7 +476,7 @@ function ConfigSaldo({ conta, entradas }) {
       <p className="repeticao-explicacao">
         Calculado a partir do saldo informado em {formatDateBR(conta.saldoInicialData?.slice(0, 10))}, somando o que entrou e
         saiu depois. Se não bater com a realidade, digite o valor exato que está no banco hoje (não a diferença) —
-        a diferença vira um lançamento de ajuste (receita ou despesa), visível no Histórico e contado no Resumo:
+        a diferença vira um lançamento na categoria "Recalibração de saldo", visível no Histórico e contado no Resumo:
       </p>
       <div className="field">
         <label>Novo saldo (o valor exato que está no banco hoje)</label>
