@@ -8,6 +8,7 @@ import { formatCurrency, NOMES_MESES } from '../utils/format';
 import { useResumoFinanceiro } from '../hooks/useResumoFinanceiro';
 import { db } from '../db/db';
 import { salvarMetas, metasPadrao } from '../db/preferencias';
+import CardPlanejamento from '../components/CardPlanejamento';
 
 // Barras horizontais pra divisão por categoria (despesa/receita/
 // investimento) — mesmo estilo pros três, cor única por seção (como na
@@ -101,7 +102,8 @@ function corDaBarraMeta(dentroDaMeta, corBoa) {
 export default function Dashboard() {
   const {
     ano, setAno, mes, setMes, anosDisponiveis,
-    categoriaPorId, temPrevistoNoPeriodo,
+    entradas, contas, categoriaPorId, temPrevistoNoPeriodo,
+    totalReceitas,
     dadosBarras, dadosPizza, dadosReceita, dadosInvestimento, orcamentosComGasto,
     percentGasta, percentInvestida,
     variacaoDespesa, sequenciaPositiva, maiorCategoria, maiorCategoriaPercent, maiorLancamento, percentualFixo
@@ -156,6 +158,15 @@ export default function Dashboard() {
           quantoMenorMelhor={false}
         />
       </div>
+
+      <h2>Planejamento</h2>
+      <CardPlanejamento
+        mes={mes}
+        renda={totalReceitas}
+        entradas={entradas}
+        categoriaPorId={categoriaPorId}
+        contas={contas}
+      />
 
       {mes !== 0 && (
         <>
