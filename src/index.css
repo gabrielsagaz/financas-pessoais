@@ -332,6 +332,7 @@ h2 {
 
 .nav-item {
   flex: 1;
+  min-width: 0;
   background: none;
   border: none;
   color: var(--text-tertiary);
@@ -345,6 +346,7 @@ h2 {
 }
 
 .nav-item.ativo { color: var(--blue); }
+.nav-label { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 100%; }
 
 /* ---------- Segmented control (tipo de lançamento) ---------- */
 .tipo-tabs {
@@ -884,20 +886,6 @@ input:focus, select:focus {
 .tag-credito { border-color: #8a5cf6; color: #8a5cf6; }
 
 .entry-fatura { color: var(--text-tertiary); font-size: 12px; }
-
-.link-faturas {
-  display: inline-flex;
-  align-items: center;
-  gap: 6px;
-  background: none;
-  border: none;
-  color: var(--blue);
-  font-size: 14px;
-  font-weight: 500;
-  padding: 0;
-  margin: -12px 0 20px;
-  cursor: pointer;
-}
 
 .metricas-grid {
   display: grid;

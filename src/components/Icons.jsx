@@ -29,6 +29,19 @@ export function IconResumo({ size = 22, filled = false }) {
   );
 }
 
+export function IconChart({ size = 22, filled = false }) {
+  return (
+    <svg width={size} height={size} {...base} fill={filled ? 'currentColor' : 'none'}>
+      <path d="M3 17l5-5 4 3 6-7 3 3" />
+      <circle cx="3" cy="17" r="1.3" fill="currentColor" stroke="none" />
+      <circle cx="8" cy="12" r="1.3" fill="currentColor" stroke="none" />
+      <circle cx="12" cy="15" r="1.3" fill="currentColor" stroke="none" />
+      <circle cx="18" cy="8" r="1.3" fill="currentColor" stroke="none" />
+      <circle cx="21" cy="11" r="1.3" fill="currentColor" stroke="none" />
+    </svg>
+  );
+}
+
 export function IconPlusCircle({ size = 22, filled = false }) {
   return (
     <svg width={size} height={size} {...base} fill={filled ? 'currentColor' : 'none'}>

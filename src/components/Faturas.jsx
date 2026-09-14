@@ -1,19 +1,16 @@
 import { useState, useMemo } from 'react';
-import { useLiveQuery } from '../db/useLiveQuery';
 import { db } from '../db/db';
 import { formatCurrency, formatDateBR, hojeISO, NOMES_MESES } from '../utils/format';
 import { calcularFaturaDoLancamento, formaPagamentoEfetiva, diaFechamentoEfetivo, diaVencimentoEfetivo } from '../utils/cartao';
 import { projetarTodasAsRecorrencias } from '../db/recorrencias';
-import { IconArrowLeft, IconCard } from '../components/Icons';
-import MoneyInput from '../components/MoneyInput';
-import ConfirmDialog from '../components/ConfirmDialog';
+import { IconCard } from './Icons';
+import MoneyInput from './MoneyInput';
+import ConfirmDialog from './ConfirmDialog';
 
-export default function Faturas({ onVoltar }) {
-  const contas = useLiveQuery(() => db.contas.orderBy('ordem').toArray(), []) || [];
-  const entradas = useLiveQuery(() => db.entries.toArray(), []) || [];
-  const recorrencias = useLiveQuery(() => db.recorrencias.toArray(), []) || [];
-  const excecoesValor = useLiveQuery(() => db.excecoesValor.toArray(), []) || [];
-
+// Embutido na tela de Resumo, abaixo do saldo por conta — não é mais uma
+// tela própria (por isso não busca os próprios dados: recebe tudo já
+// carregado do Resumo, que já precisa dessas mesmas listas).
+export default function Faturas({ contas, entradas, recorrencias, excecoesValor }) {
   // Pagar a fatura pode ser de qualquer conta, inclusive a mesma que gerou
   // o crédito (ex: pagar a fatura do Nubank com o saldo em débito do Nubank).
   const contasParaPagar = contas;
@@ -39,27 +36,23 @@ export default function Faturas({ onVoltar }) {
     return contas.filter((c) => idsComCredito.has(c.id));
   }, [contas, todasEntradas]);
 
-  return (
-    <div className="page">
-      <button type="button" className="botao-voltar" onClick={onVoltar}>
-        <IconArrowLeft size={18} /> Voltar
-      </button>
-      <h1>Faturas</h1>
+  // Nada lançado em crédito ainda — não mostra a seção (mantém o Resumo
+  // limpo em vez de exibir um "vazio" permanente pra quem nunca usa isso).
+  if (cartoes.length === 0) return null;
 
-      {cartoes.length === 0 ? (
-        <p className="vazio">Nenhuma despesa lançada no crédito ainda. Ao lançar uma despesa, escolha "Crédito" na forma de pagamento.</p>
-      ) : (
-        cartoes.map((cartao) => (
-          <FaturasDoCartao
-            key={cartao.id}
-            cartao={cartao}
-            entradas={todasEntradas}
-            entradasReais={entradas}
-            contasParaPagar={contasParaPagar}
-          />
-        ))
-      )}
-    </div>
+  return (
+    <>
+      <h2>Faturas</h2>
+      {cartoes.map((cartao) => (
+        <FaturasDoCartao
+          key={cartao.id}
+          cartao={cartao}
+          entradas={todasEntradas}
+          entradasReais={entradas}
+          contasParaPagar={contasParaPagar}
+        />
+      ))}
+    </>
   );
 }
 

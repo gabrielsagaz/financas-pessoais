@@ -1,7 +1,8 @@
-import { IconResumo, IconPlusCircle, IconList, IconTag } from './Icons';
+import { IconResumo, IconChart, IconPlusCircle, IconList, IconTag } from './Icons';
 
 const ABAS = [
   { id: 'resumo', label: 'Resumo', Icon: IconResumo },
+  { id: 'dashboard', label: 'Dashboard', Icon: IconChart },
   { id: 'lancar', label: 'Lançar', Icon: IconPlusCircle },
   { id: 'historico', label: 'Histórico', Icon: IconList },
   { id: 'categorias', label: 'Categorias', Icon: IconTag }

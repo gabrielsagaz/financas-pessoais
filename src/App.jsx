@@ -8,18 +8,17 @@ import BottomNav from './components/BottomNav';
 import LockScreen from './components/LockScreen';
 import Login from './pages/Login';
 import Resumo from './pages/Resumo';
+import Dashboard from './pages/Dashboard';
 import Lancar from './pages/Lancar';
 import Historico from './pages/Historico';
 import Categorias from './pages/Categorias';
 import Perfil from './pages/Perfil';
-import Faturas from './pages/Faturas';
 import { IconUser } from './components/Icons';
 
 export default function App() {
   const { usuario, carregando } = useAuth();
   const [abaAtiva, setAbaAtiva] = useState('resumo');
   const [mostrandoPerfil, setMostrandoPerfil] = useState(false);
-  const [mostrandoFaturas, setMostrandoFaturas] = useState(false);
   const [pronto, setPronto] = useState(false);
   const [bloqueado, setBloqueado] = useState(false);
 
@@ -86,16 +85,6 @@ export default function App() {
     );
   }
 
-  if (mostrandoFaturas) {
-    return (
-      <div className="app">
-        <main className="app-content">
-          <Faturas onVoltar={() => setMostrandoFaturas(false)} />
-        </main>
-      </div>
-    );
-  }
-
   return (
     <div className="app">
       <header className="app-header">
@@ -104,7 +93,8 @@ export default function App() {
         </button>
       </header>
       <main className="app-content">
-        {abaAtiva === 'resumo' && <Resumo onAbrirFaturas={() => setMostrandoFaturas(true)} />}
+        {abaAtiva === 'resumo' && <Resumo />}
+        {abaAtiva === 'dashboard' && <Dashboard />}
         {abaAtiva === 'lancar' && <Lancar />}
         {abaAtiva === 'historico' && <Historico />}
         {abaAtiva === 'categorias' && <Categorias />}
