@@ -443,10 +443,10 @@ function ConfigSaldo({ conta, entradas }) {
       </div>
       <p className="repeticao-explicacao">
         Calculado a partir do saldo informado em {formatDateBR(conta.saldoInicialData)}, somando o que entrou e
-        saiu depois. Se não bater com a realidade, recalibre com o saldo de hoje:
+        saiu depois. Se não bater com a realidade, digite o valor exato que está no banco hoje (não a diferença):
       </p>
       <div className="field">
-        <label>Recalibrar saldo (usa a data de hoje)</label>
+        <label>Novo saldo (o valor exato que está no banco hoje)</label>
         <MoneyInput value={valorRecalibrar} onChange={setValorRecalibrar} />
       </div>
       <button type="button" className="btn-cancel" style={{ width: '100%' }} onClick={recalibrar}>Recalibrar</button>
