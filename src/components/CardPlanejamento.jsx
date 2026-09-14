@@ -1,9 +1,8 @@
 import { useMemo, useState } from 'react';
 import { useLiveQuery } from '../db/useLiveQuery';
 import { db } from '../db/db';
-import { formatCurrency, hojeISO, anoMesDe } from '../utils/format';
+import { formatCurrency, hojeISO } from '../utils/format';
 import { contaTemSaldoControlado, calcularSaldoConta } from '../db/saldos';
-import { classificacaoEfetiva } from '../utils/classificacao';
 
 // ---------------------------------------------------------------------------
 // Cascata: a renda do mês é alocada em ORDEM de prioridade — cada balde
@@ -11,7 +10,9 @@ import { classificacaoEfetiva } from '../utils/classificacao';
 //
 //   1. Investimento — % da renda OU um valor fixo em R$ (o usuário escolhe
 //      qual dos dois usar, editando o campo correspondente em Perfil)
-//   2. Reserva de emergência — até atingir a meta (meses de despesa média)
+//   2. Reserva de emergência — até atingir a meta (meses × despesa mensal
+//      ESTIMADA, um valor que você define direto em Perfil > Planejamento —
+//      não uma média calculada do histórico de lançamentos)
 //   3. Dívidas — soma das parcelas mensais das dívidas ainda não quitadas
 //   4. Necessidade/Desejo — não geram lançamento nenhum: é o dinheiro que já
 //      fica na conta principal e é gasto normalmente, como sempre foi.
@@ -24,12 +25,12 @@ import { classificacaoEfetiva } from '../utils/classificacao';
 // mês): nesse caso os baldes seguintes zeram e o card avisa.
 // ---------------------------------------------------------------------------
 
-function calcularCascata({ renda, modoInvestimento, percentInvestimento, valorFixoInvestimento, reservaAtual, mesesReserva, mediaDespesaMensal, dividasAtivas }) {
+function calcularCascata({ renda, modoInvestimento, percentInvestimento, valorFixoInvestimento, reservaAtual, mesesReserva, despesaMensalEstimada, dividasAtivas }) {
   const aporteInvestimento = modoInvestimento === 'fixo' ? valorFixoInvestimento : renda * (percentInvestimento / 100);
   const restanteAposInvestimento = Math.max(0, renda - aporteInvestimento);
   const investimentoEstourouRenda = aporteInvestimento > renda;
 
-  const metaReserva = mesesReserva * mediaDespesaMensal;
+  const metaReserva = mesesReserva * despesaMensalEstimada;
   const faltanteReserva = Math.max(0, metaReserva - reservaAtual);
   const aporteReserva = Math.min(restanteAposInvestimento, faltanteReserva);
   const restanteAposReserva = restanteAposInvestimento - aporteReserva;
@@ -41,12 +42,12 @@ function calcularCascata({ renda, modoInvestimento, percentInvestimento, valorFi
   return { metaReserva, faltanteReserva, aporteReserva, pagamentoDividas, aporteInvestimento, sobraLivre, investimentoEstourouRenda };
 }
 
-export default function CardPlanejamento({ mes, renda, entradas, categoriaPorId, contas }) {
+export default function CardPlanejamento({ mes, renda, entradas, contas }) {
   const dividasTodas = useLiveQuery(() => db.dividas.toArray(), []) || [];
   const registroMetas = useLiveQuery(() => db.configuracoes.where('chave').equals('metasCascata').first(), []);
   const metas = registroMetas
     ? JSON.parse(registroMetas.valor)
-    : { mesesReserva: 6, percentInvestimento: 10, valorFixoInvestimento: 0, modoInvestimento: 'percent' };
+    : { mesesReserva: 6, despesaMensalEstimada: 0, percentInvestimento: 10, valorFixoInvestimento: 0, modoInvestimento: 'percent' };
 
   const [confirmando, setConfirmando] = useState(false);
   const [contaOrigemId, setContaOrigemId] = useState(null);
@@ -60,30 +61,6 @@ export default function CardPlanejamento({ mes, renda, entradas, categoriaPorId,
     [contasReserva, entradas]
   );
 
-  // Média histórica mensal de despesa (todos os tipos) e, só como
-  // referência (sem afetar a cascata), de Necessidade — pra avisar se a
-  // Sobra Livre nem cobre o básico. Olha todo o histórico real (não
-  // previsto), agrupado por mês, com pelo menos 1 despesa lançada.
-  const { mediaDespesaMensal, mediaNecessidadeMensal, mesesComDados } = useMemo(() => {
-    const porMes = {};
-    for (const e of entradas) {
-      if (e.tipo !== 'despesa' || e.previsto) continue;
-      const { ano: a, mes: m } = anoMesDe(e.data);
-      const chave = `${a}-${m}`;
-      if (!porMes[chave]) porMes[chave] = { total: 0, necessidade: 0 };
-      porMes[chave].total += e.valor;
-      const categoria = categoriaPorId[e.categoriaId];
-      if (classificacaoEfetiva(categoria, null) === 'necessidade') porMes[chave].necessidade += e.valor;
-    }
-    const meses = Object.values(porMes);
-    const n = meses.length || 1;
-    return {
-      mediaDespesaMensal: meses.reduce((s, m) => s + m.total, 0) / n,
-      mediaNecessidadeMensal: meses.reduce((s, m) => s + m.necessidade, 0) / n,
-      mesesComDados: meses.length
-    };
-  }, [entradas, categoriaPorId]);
-
   const cascata = useMemo(
     () => calcularCascata({
       renda,
@@ -92,10 +69,10 @@ export default function CardPlanejamento({ mes, renda, entradas, categoriaPorId,
       valorFixoInvestimento: metas.valorFixoInvestimento,
       reservaAtual,
       mesesReserva: metas.mesesReserva,
-      mediaDespesaMensal,
+      despesaMensalEstimada: metas.despesaMensalEstimada,
       dividasAtivas
     }),
-    [renda, reservaAtual, metas, mediaDespesaMensal, dividasAtivas]
+    [renda, reservaAtual, metas, dividasAtivas]
   );
 
   async function confirmarAlocacao() {
@@ -167,8 +144,8 @@ export default function CardPlanejamento({ mes, renda, entradas, categoriaPorId,
   if (mes === 0) {
     return <p className="vazio">Selecione um mês específico pra ver o planejamento — a cascata é sempre mensal.</p>;
   }
-  if (mesesComDados < 2) {
-    return <p className="vazio">Ainda faltam meses de histórico pra calcular uma média de despesa confiável (tem {mesesComDados}).</p>;
+  if (metas.despesaMensalEstimada <= 0) {
+    return <p className="vazio">Defina sua despesa mensal estimada em Perfil → Planejamento pra calcular a meta de reserva.</p>;
   }
 
   return (
@@ -193,7 +170,7 @@ export default function CardPlanejamento({ mes, renda, entradas, categoriaPorId,
         <strong>−{formatCurrency(cascata.aporteReserva)}</strong>
       </div>
       <p className="repeticao-explicacao" style={{ margin: '-4px 0 4px' }}>
-        Meta: {formatCurrency(cascata.metaReserva)} ({metas.mesesReserva}× a média de despesa) · atual: {formatCurrency(reservaAtual)}
+        Meta: {formatCurrency(cascata.metaReserva)} ({metas.mesesReserva}× a despesa mensal estimada) · atual: {formatCurrency(reservaAtual)}
       </p>
 
       {dividasAtivas.length > 0 && (
@@ -208,15 +185,10 @@ export default function CardPlanejamento({ mes, renda, entradas, categoriaPorId,
         <strong style={{ color: 'var(--green)' }}>{formatCurrency(cascata.sobraLivre)}</strong>
       </div>
 
-      {cascata.investimentoEstourouRenda ? (
+      {cascata.investimentoEstourouRenda && (
         <p className="aviso-fatura aviso-fatura-atrasada" style={{ margin: 0 }}>
           O valor fixo de investimento ({formatCurrency(cascata.aporteInvestimento)}) é maior que a renda do mês —
           não sobra nada pra Reserva, Dívidas ou Sobra Livre.
-        </p>
-      ) : cascata.sobraLivre < mediaNecessidadeMensal && (
-        <p className="aviso-fatura" style={{ margin: 0 }}>
-          Sua Sobra Livre ({formatCurrency(cascata.sobraLivre)}) é menor que sua média de gastos com Necessidade
-          ({formatCurrency(mediaNecessidadeMensal)}) — pode não sobrar muito pra Desejo esse mês.
         </p>
       )}
 

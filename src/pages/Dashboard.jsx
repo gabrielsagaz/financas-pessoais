@@ -164,7 +164,6 @@ export default function Dashboard() {
         mes={mes}
         renda={totalReceitas}
         entradas={entradas}
-        categoriaPorId={categoriaPorId}
         contas={contas}
       />
 

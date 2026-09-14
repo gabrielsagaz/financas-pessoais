@@ -512,7 +512,7 @@ function MetasCascata() {
   const registro = useLiveQuery(() => db.configuracoes.where('chave').equals('metasCascata').first(), []);
   const metas = registro
     ? JSON.parse(registro.valor)
-    : { mesesReserva: 6, percentInvestimento: 10, valorFixoInvestimento: 0, modoInvestimento: 'percent' };
+    : { mesesReserva: 6, despesaMensalEstimada: 0, percentInvestimento: 10, valorFixoInvestimento: 0, modoInvestimento: 'percent' };
   const [resultadoMigracao, setResultadoMigracao] = useState(null);
   const [migrando, setMigrando] = useState(false);
 
@@ -542,6 +542,10 @@ function MetasCascata() {
         <div className="field">
           <label>Meses de despesas na reserva de emergência</label>
           <input type="number" min="0" value={metas.mesesReserva} onChange={(e) => salvar('mesesReserva', e.target.value)} style={{ width: 64, textAlign: 'center' }} />
+        </div>
+        <div className="field">
+          <label>Sua despesa mensal estimada (usada na meta acima)</label>
+          <MoneyInput value={metas.despesaMensalEstimada} onChange={(v) => salvar('despesaMensalEstimada', v)} />
         </div>
         <div className="field">
           <label>% da renda pro aporte de investimento{metas.modoInvestimento === 'percent' && ' (ativo)'}</label>
