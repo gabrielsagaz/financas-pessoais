@@ -15,7 +15,7 @@ export default function Historico() {
   const [filtroAno, setFiltroAno] = useState(new Date().getFullYear());
   const [filtroMes, setFiltroMes] = useState(0); // 0 = todos
   const [editandoId, setEditandoId] = useState(null);
-  const [idRecemDuplicado, setIdRecemDuplicado] = useState(null);
+  const [rascunhoDuplicado, setRascunhoDuplicado] = useState(null);
   const [editandoPrevistoChave, setEditandoPrevistoChave] = useState(null);
   const [excluindoId, setExcluindoId] = useState(null);
   const [mensagem, setMensagem] = useState('');
@@ -68,8 +68,9 @@ export default function Historico() {
   // Cria uma cópia independente do lançamento (não herda recorrência,
   // parcela nem, se for transferência, muda as contas) e abre em edição na
   // hora, pra ajustar data/valor rapidamente se for o caso.
-  async function duplicar(entry) {
-    const novoId = await db.entries.add({
+  function duplicar(entry) {
+    setMensagem('');
+    setRascunhoDuplicado({
       tipo: entry.tipo,
       valor: entry.valor,
       data: entry.data,
@@ -83,12 +84,11 @@ export default function Historico() {
       origem: 'manual',
       externalId: null,
       recorrenciaId: null,
-      numeroParcela: null,
-      criadoEm: new Date().toISOString()
+      numeroParcela: null
+      // Sem `id`: nada existe no banco ainda — só é criado de verdade se o
+      // usuário clicar em Salvar no formulário que abre em seguida (ver
+      // EditarEntry.salvar, que usa db.entries.add quando não há id).
     });
-    setMensagem('Lançamento duplicado ✓ — ajuste o que precisar.');
-    setEditandoId(novoId);
-    setIdRecemDuplicado(novoId);
   }
 
   function descreverFatura(entry) {
@@ -124,6 +124,20 @@ export default function Historico() {
 
       {mensagem && <p className="mensagem">{mensagem}</p>}
 
+      {rascunhoDuplicado && (
+        <div className="entry-item">
+          <h2 style={{ marginTop: 0 }}>Duplicando lançamento</h2>
+          <EditarEntry
+            entry={rascunhoDuplicado}
+            onCancelar={() => setRascunhoDuplicado(null)}
+            onSalvo={() => {
+              setRascunhoDuplicado(null);
+              setMensagem('Lançamento duplicado ✓');
+            }}
+          />
+        </div>
+      )}
+
       {listaFiltrada.length === 0 && <p className="vazio">Nenhum lançamento neste filtro.</p>}
 
       <ul className="lista-entries">
@@ -135,14 +149,8 @@ export default function Historico() {
             {editandoId === entry.id && !entry.previsto ? (
               <EditarEntry
                 entry={entry}
-                onCancelar={async () => {
-                  if (idRecemDuplicado === entry.id) {
-                    await db.entries.delete(entry.id);
-                    setIdRecemDuplicado(null);
-                  }
-                  setEditandoId(null);
-                }}
-                onSalvo={() => { setIdRecemDuplicado(null); setEditandoId(null); }}
+                onCancelar={() => setEditandoId(null)}
+                onSalvo={() => setEditandoId(null)}
               />
             ) : entry.previsto && editandoPrevistoChave === chave ? (
               <EditarValorPrevisto
@@ -267,6 +275,8 @@ function EditarEntry({ entry, onCancelar, onSalvo }) {
   const contas = useLiveQuery(() => db.contas.orderBy('ordem').toArray()) || [];
   const mostrarTogglePagamento = entry.tipo === 'despesa';
 
+  const ehNovo = entry.id == null; // sem id: é um rascunho (duplicando) — nada existe no banco ainda
+
   async function criarCategoria(nome) {
     return db.categorias.add({ tipo: entry.tipo, nome, ordem: categorias.length });
   }
@@ -277,6 +287,17 @@ function EditarEntry({ entry, onCancelar, onSalvo }) {
     return db.contas.add({ nome, ordem: contas.length, arquivada: false, tipo: 'conta' });
   }
 
+  // Atualiza o lançamento existente, ou cria um novo se `entry` for só um
+  // rascunho em memória (duplicando) — é o que garante que a duplicação só
+  // vira um lançamento de verdade se o usuário chegar até aqui e salvar.
+  async function salvarOuCriar(camposAtualizados) {
+    if (!ehNovo) {
+      await db.entries.update(entry.id, camposAtualizados);
+      return;
+    }
+    await db.entries.add({ ...entry, ...camposAtualizados, criadoEm: new Date().toISOString() });
+  }
+
   async function salvar() {
     setSalvando(true);
     try {
@@ -284,13 +305,14 @@ function EditarEntry({ entry, onCancelar, onSalvo }) {
         const mudancas = ehPagamentoFatura
           ? { valor, data, contaId, nota: nota.trim() } // sem contaDestinoId — não existe pra pagamento de fatura
           : { valor, data, contaId, contaDestinoId, nota: nota.trim() };
-        await db.entries.update(entry.id, mudancas);
+        await salvarOuCriar(mudancas);
       } else if (repetir && !jaEhRecorrente) {
         // Transforma este lançamento avulso num lançamento fixo: remove a
-        // entrada solta e deixa a recorrência gerar a ocorrência do mesmo
-        // mês em seu lugar, já linkada (`recorrenciaId`).
+        // entrada solta (se já existir uma — duplicando não existe nada
+        // ainda) e deixa a recorrência gerar a ocorrência do mesmo mês em
+        // seu lugar, já linkada (`recorrenciaId`).
         const parcelas = modoRepeticao === 'parcelas' ? Number(totalParcelas) : null;
-        await db.entries.delete(entry.id);
+        if (!ehNovo) await db.entries.delete(entry.id);
         await criarRecorrencia({
           tipo: entry.tipo,
           valor,
@@ -303,7 +325,7 @@ function EditarEntry({ entry, onCancelar, onSalvo }) {
           totalParcelas: parcelas
         });
       } else {
-        await db.entries.update(entry.id, {
+        await salvarOuCriar({
           valor,
           data,
           categoriaId,
