@@ -15,6 +15,7 @@ export default function Historico() {
   const [filtroAno, setFiltroAno] = useState(new Date().getFullYear());
   const [filtroMes, setFiltroMes] = useState(0); // 0 = todos
   const [editandoId, setEditandoId] = useState(null);
+  const [idRecemDuplicado, setIdRecemDuplicado] = useState(null);
   const [editandoPrevistoChave, setEditandoPrevistoChave] = useState(null);
   const [excluindoId, setExcluindoId] = useState(null);
   const [mensagem, setMensagem] = useState('');
@@ -87,6 +88,7 @@ export default function Historico() {
     });
     setMensagem('Lançamento duplicado ✓ — ajuste o que precisar.');
     setEditandoId(novoId);
+    setIdRecemDuplicado(novoId);
   }
 
   function descreverFatura(entry) {
@@ -133,8 +135,14 @@ export default function Historico() {
             {editandoId === entry.id && !entry.previsto ? (
               <EditarEntry
                 entry={entry}
-                onCancelar={() => setEditandoId(null)}
-                onSalvo={() => setEditandoId(null)}
+                onCancelar={async () => {
+                  if (idRecemDuplicado === entry.id) {
+                    await db.entries.delete(entry.id);
+                    setIdRecemDuplicado(null);
+                  }
+                  setEditandoId(null);
+                }}
+                onSalvo={() => { setIdRecemDuplicado(null); setEditandoId(null); }}
               />
             ) : entry.previsto && editandoPrevistoChave === chave ? (
               <EditarValorPrevisto
