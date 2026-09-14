@@ -1,5 +1,4 @@
 import { db } from './db';
-import { anoMesAtualChave } from '../utils/format';
 
 // Tabelas com dados financeiros (fica de fora `configuracoes`, que guarda o
 // hash do PIN — é uma config do dispositivo, não um dado que faça sentido
@@ -61,13 +60,15 @@ export async function importarBackup(objetoBackup) {
 // `ultimaGeracao` de cada recorrência pro mês atual; sem isso, elas
 // regenerariam do zero (a partir da data de início) os mesmos lançamentos
 // que acabaram de ser apagados na próxima vez que o app for aberto.
+// Apaga TODOS os lançamentos — reais e as recorrências que os geram. Sem
+// apagar as recorrências, os lançamentos "previstos" (projetados na hora,
+// não guardados no banco) continuariam aparecendo em Histórico/Faturas/
+// Dashboard, mesmo com `entries` vazia — eles não vêm de lá, vêm de
+// projetar as recorrências pra frente.
 export async function apagarTodosOsLancamentos() {
-  const mesAtual = anoMesAtualChave();
-  await db.transaction('rw', db.entries, db.recorrencias, async () => {
+  await db.transaction('rw', db.entries, db.recorrencias, db.excecoesValor, async () => {
     await db.entries.clear();
-    const recorrencias = await db.recorrencias.toArray();
-    for (const r of recorrencias) {
-      await db.recorrencias.update(r.id, { ultimaGeracao: mesAtual });
-    }
+    await db.recorrencias.clear();
+    await db.excecoesValor.clear();
   });
 }
